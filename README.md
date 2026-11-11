@@ -302,7 +302,7 @@ Purge in Magpie/
 │   ├── bundled.mjs        读包内 skills/ 与 personas/，标 builtin
 │   └── state.mjs          快照落盘（state/catalog.json + page/catalog.js）
 ├── page/                  插件页：index.html / app.js / style.css / icon.*
-│   ├── icon.svg           侧栏与页面标签的图标（实心锁）
+│   ├── icon-lock.svg      侧栏与页面标签的图标（实心锁）
 │   └── card.png           插件卡片的图（由 tools/card-icon.mjs 内联进 package.json）
 ├── preview/               本地预览：mock 宿主 + 演示快照 + 单文件 purge-preview.html
 ├── tools/
@@ -321,7 +321,7 @@ magpie 的两个 icon 键管的是不同地方，改错一个就会影响另一�
 | `magpie.icon` | 插件**卡片** | **必须是 `https://` 或 `data:image/`**——magpie 的 `iconOf()` 会直接丢掉相对路径 |
 | `magpie.page.icon` | **侧栏**标签与页面 tab | 可以是包内相对路径 |
 
-所以卡片图走 `tools/card-icon.mjs` 内联成 data URI（约 41 KiB），侧栏仍是 `page/icon.svg` 的实心锁。
+所以卡片图走 `tools/card-icon.mjs` 内联成 data URI（约 41 KiB），侧栏仍是 `page/icon-lock.svg` 的实心锁。
 换了卡片图就重跑一次脚本；`npm run prepack` 会顺带校验。
 
 ## 预览整个界面
@@ -418,6 +418,7 @@ node tools/scan.mjs --json
 
 | 版本 | 要点 |
 | --- | --- |
+| `0.6.4` | 侧栏图标改用独立 `icon-lock.svg`，避开已打开窗口沿用旧图标缓存；侧栏名称与锁形不变 |
 | `0.6.3` | 侧栏名字改为「破甲&注入」，图标换成黑白单色实心锁 |
 | `0.6.2` | 正文一律不落盘（`.js`、`.json`、`state/catalog.json` 全都不含），注入时按 `source.root/rel` 现读——彻底止住 Defender 对聚合文件的反复上传 |
 | `0.6.1` | 修：注入关闭时人设行恒显示「未启用」、点它没有反应（判定把人设一起清空了） |

@@ -1,7 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="破甲&amp;注入">
   <!-- 实心锁：单一黑色剪影，交给宿主按当前文字色渲染。
        侧栏只给 12–16px，锁体成块、钥匙孔留空，缩到 18px 仍能读出锁形；
-       黑白两态共用同一个 alpha 形状，不依赖主题色。 -->
+       黑白两态共用同一个 alpha 形状，不依赖主题色。
+       独立文件名 icon-lock.svg：避免宿主沿用旧 icon.svg 的侧栏缓存。 -->
   <title>破甲&amp;注入</title>
   <defs>
     <mask id="purge-lock-cut">
