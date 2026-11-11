@@ -1,8 +1,16 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Purge in Magpie">
-  <!-- 空心盾牌：不铺底色块，只留轮廓。
-       侧栏实际只给 12–16px，描边是这里唯一的可调项：
-       w6/w8 在 12px 下尖角与直边被磨平、看着像圆环；w10 以上在 64px 下空心又缩成一小块。
-       w9 是两头都立得住的一档。颜色 #4f5fe0 在深色与浅色宿主背景上都压得住，两侧共用一版。 -->
-  <path d="M32 10 L53 19 V36 C53 45.5 43.5 52.5 32 54.5 C20.5 52.5 11 45.5 11 36 V19 Z"
-        fill="none" stroke="#4f5fe0" stroke-width="9" stroke-linejoin="round" stroke-linecap="round"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="破甲&amp;注入">
+  <!-- 实心锁：单一黑色剪影，交给宿主按当前文字色渲染。
+       侧栏只给 12–16px，锁体成块、钥匙孔留空，缩到 18px 仍能读出锁形；
+       黑白两态共用同一个 alpha 形状，不依赖主题色。 -->
+  <title>破甲&amp;注入</title>
+  <defs>
+    <mask id="purge-lock-cut">
+      <rect width="64" height="64" fill="#fff"/>
+      <circle cx="32" cy="37.4" r="4.8" fill="#000"/>
+      <rect x="29.9" y="40.4" width="4.2" height="8.8" rx="2.1" fill="#000"/>
+    </mask>
+  </defs>
+  <path d="M22 30V22.7C22 14.4 26.6 9 32 9s10 5.4 10 13.7V30"
+        fill="none" stroke="#000" stroke-width="7.4" stroke-linecap="round"/>
+  <rect x="13.2" y="26.8" width="37.6" height="28.2" rx="8.4" fill="#000" mask="url(#purge-lock-cut)"/>
 </svg>

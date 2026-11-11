@@ -9,7 +9,7 @@
 | --- | --- |
 | npm | [`@fish-under-sea/magpie-purge`](https://www.npmjs.com/package/@fish-under-sea/magpie-purge) |
 | 仓库 | <https://github.com/Fish-under-sea/magpie-purge> |
-| 侧栏名字 | 破甲 · Purge（`magpie.page.titles`） |
+| 侧栏名字 | 破甲&注入（`magpie.page.titles`） |
 | 许可 | MIT |
 
 ## 致谢
@@ -160,7 +160,7 @@ magpie plugin add "./magpie-purge"
 magpie plugin list
 ```
 
-装好后 magpie 的侧栏会多出一页「破甲 · Purge」；插件页第一次打开时，后端会清点包内内容与已导入的文件，
+装好后 magpie 的侧栏会多出一页「破甲&注入」；插件页第一次打开时，后端会清点包内内容与已导入的文件，
 写出三份产物，页面读后两份。
 
 ### 三份产物分别放哪
@@ -302,7 +302,7 @@ Purge in Magpie/
 │   ├── bundled.mjs        读包内 skills/ 与 personas/，标 builtin
 │   └── state.mjs          快照落盘（state/catalog.json + page/catalog.js）
 ├── page/                  插件页：index.html / app.js / style.css / icon.*
-│   ├── icon.svg           侧栏与页面标签的图标（空心盾牌）
+│   ├── icon.svg           侧栏与页面标签的图标（实心锁）
 │   └── card.png           插件卡片的图（由 tools/card-icon.mjs 内联进 package.json）
 ├── preview/               本地预览：mock 宿主 + 演示快照 + 单文件 purge-preview.html
 ├── tools/
@@ -321,7 +321,7 @@ magpie 的两个 icon 键管的是不同地方，改错一个就会影响另一�
 | `magpie.icon` | 插件**卡片** | **必须是 `https://` 或 `data:image/`**——magpie 的 `iconOf()` 会直接丢掉相对路径 |
 | `magpie.page.icon` | **侧栏**标签与页面 tab | 可以是包内相对路径 |
 
-所以卡片图走 `tools/card-icon.mjs` 内联成 data URI（约 41 KiB），侧栏仍是 `page/icon.svg` 的空心盾牌。
+所以卡片图走 `tools/card-icon.mjs` 内联成 data URI（约 41 KiB），侧栏仍是 `page/icon.svg` 的实心锁。
 换了卡片图就重跑一次脚本；`npm run prepack` 会顺带校验。
 
 ## 预览整个界面
@@ -418,6 +418,7 @@ node tools/scan.mjs --json
 
 | 版本 | 要点 |
 | --- | --- |
+| `0.6.3` | 侧栏名字改为「破甲&注入」，图标换成黑白单色实心锁 |
 | `0.6.2` | 正文一律不落盘（`.js`、`.json`、`state/catalog.json` 全都不含），注入时按 `source.root/rel` 现读——彻底止住 Defender 对聚合文件的反复上传 |
 | `0.6.1` | 修：注入关闭时人设行恒显示「未启用」、点它没有反应（判定把人设一起清空了） |
 | `0.6.0` | 正文移出 `page/catalog.js`、改写成 `page/catalog.json` 按需取，修 Defender `Trojan:Script/Wacatac.C!ml` 误判；配色换莓石；详情改浮层；分组可折叠；整页不滚；模式去掉 off 改由开关控制 |
