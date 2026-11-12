@@ -16,6 +16,7 @@ import { compose, rewrite, supported } from './lib/rewrite.mjs'
 import { readState } from './lib/agentpurge.mjs'
 import { applyPrefs, resolve as resolvePlan } from './lib/plan.mjs'
 import { ensurePaths, loadCatalog, ownOptions, sync } from './lib/state.mjs'
+import { createStreamStripper, looksLikeRefusal, replyText, streamSlots, stripLeadingThink, stripThinkInPlace } from './lib/response.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
 
@@ -276,4 +277,71 @@ const hook = createHook(here)
 
 export async function onRequest(body, ctx) {
   return hook.onRequest(body, ctx)
+}
+
+// ── 回复侧 ────────────────────────────────────────────────────────────────
+// 与 onRequest 共用同一份 options，两个开关默认都开：
+//   stripThink   去掉回复开头的 think 块（流式与整包都处理）
+//   refusalWatch 认出「短、无内容的推脱」，只记一行日志，不改回复
+//
+// 这里刻意不重试、不改写：钩子拿到的回复已经生成（流式时甚至是半条），
+// 想改行为请改人设/技能。失败一律 fail-open，绝不把一条正常回复弄坏。
+const replyOpts = (ctx) => {
+  const o = ctx?.options ?? {}
+  return { stripThink: o.stripThink !== false, refusalWatch: o.refusalWatch !== false }
+}
+
+export async function onResponse(body, ctx) {
+  if (!body || typeof body !== 'object') return
+  try {
+    const { stripThink, refusalWatch } = replyOpts(ctx)
+    const failed = typeof ctx?.status === 'number' && ctx.status >= 400
+    if (refusalWatch && !failed) {
+      const visible = stripThink ? stripLeadingThink(replyText(body)) : replyText(body)
+      if (looksLikeRefusal(visible)) {
+        console.log(`[purge] refusal opening (agent=${ctx?.agent || '?'} model=${ctx?.model || '?'})`)
+      }
+    }
+    if (stripThink && stripThinkInPlace(body)) return body
+  } catch {
+    return
+  }
+}
+
+export async function onEvent(ev, ctx) {
+  if (!ev || typeof ev !== 'object') return
+  try {
+    const { stripThink, refusalWatch } = replyOpts(ctx)
+    const slots = streamSlots(ev)
+    if (!slots.length) return
+    const st = (ctx.state ??= {})
+    let changed = false
+
+    // 先看这一段的可读文本（用于拒绝识别），再做 think 剥离
+    if (!st.purge) st.purge = { decided: false, seen: '' }
+    if (refusalWatch && !st.purge.decided) {
+      for (const { obj, key } of slots) {
+        if (typeof obj[key] !== 'string') continue
+        st.purge.seen += stripLeadingThink(obj[key])
+      }
+      const seen = st.purge.seen.trim()
+      if (looksLikeRefusal(st.purge.seen) || seen.length > 300 || /[。！？\n]/.test(seen)) {
+        if (looksLikeRefusal(st.purge.seen)) {
+          console.log(`[purge] refusal opening (agent=${ctx?.agent || '?'} model=${ctx?.model || '?'} mode=stream)`)
+        }
+        st.purge.decided = true
+      }
+    }
+
+    if (!stripThink) return changed ? ev : undefined
+    const stripper = (st.purgeStream ??= createStreamStripper())
+    for (const { obj, key } of slots) {
+      if (typeof obj[key] !== 'string') continue
+      const u = stripper.push(obj[key])
+      if (u !== obj[key]) { obj[key] = u; changed = true }
+    }
+    return changed ? ev : undefined
+  } catch {
+    return
+  }
 }
