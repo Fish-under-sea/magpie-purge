@@ -217,6 +217,8 @@ magpie plugin list
 | `inline` | 页面里直接贴进来的人设/技能正文，不进磁盘 |
 | `gatewayTimeoutMs` | 钩子预算，默认 1500 ms（magpie 侧 100–10000） |
 | `useAgentPurge` | 默认 `false`。设为 `true` 才去读 agent-purge 的 `state.json`，见下 |
+| `stripThink` | 默认 `true`：去掉回复开头的 `<think>` 块（整包与流式都处理） |
+| `refusalWatch` | 默认 `true`：认出「短、无内容的推脱」，只记日志，不改回复 |
 
 ### 想读 agent-purge 的设置？（默认关）
 
@@ -277,6 +279,34 @@ magpie plugin options magpie-purge '{"useAgentPurge":true}'
 随快照一起下发，点开就能读，不用去磁盘翻文件。超过 8000 字符会截断并标出总长度；
 换条目自动收起，不会把上一条的正文带过来。
 
+## 回复侧：think 块与推脱观测（本 PR 新增）
+
+前面的所有内容都在改**请求**（system 里的人设与技能）。这一节管**回复**，只做两件事：
+
+1. **去掉回复开头的 think 块。** 有的模型会把 `<think>…</think>` 留在正文里，下一轮
+   跟着消息历史回去，又被当成正文接着推理。`onResponse` 处理整包，`onEvent` 处理流式；
+   流式时标签可能被切在两个 chunk 之间（`<thi` + `nk>`），所以剥离器会先攒住没确认的前缀，
+   确认不是 think 就原样吐出去——**正常的 `<div>` 之类不会被吞**。
+2. **认出空推脱，记一行日志。** 只认「开头一句拒绝 + 通篇没有实质内容」的短回复；
+   带代码块、编号步骤、「不过我可以给你…」的一律不算。命中的写
+   `[purge] refusal opening (agent=… model=…)`，用来回答「这条到底是模型拒了，还是配置错了」。
+
+**刻意不做的事：**
+
+- 不重试、不改写回复内容。钩子拿到的回复已经生成，流式时甚至只有半条；重跑模型是改请求，
+  属于 `onRequest` 的活。想让模型少拒，请换人设/技能，而不是在回复层硬掰。
+- 不因为认到推脱就替换成别的话。人设本身不承诺无条件照做（见「削弱版」一节），
+  统计归统计，干预归干预。
+
+两个开关都能单独关：
+
+```bash
+magpie plugin options magpie-purge '{"stripThink":false}'
+magpie plugin options magpie-purge '{"refusalWatch":false}'
+```
+
+失败一律 fail-open：剥不动、认不准，就把原文放回去，绝不让一条正常回复变坏。
+
 ## 边界（照实说，不含糊）
 
 - 只处理**经过 magpie 网关**的 agent 请求；客户端自己写死的行为、不经过网关的流量改不到。
@@ -284,6 +314,7 @@ magpie plugin options magpie-purge '{"useAgentPurge":true}'
 - 页面**不读磁盘**：所有扫描与读盘都在插件后端（`hooks.js`）里做，页面只显示快照。
 - 不执行导入件里的任何脚本：DSH 插件包与导出包只被**判型与登记**，不当代码跑。
 - 坏包（缺 manifest、路径带 `..`、超大文件）整个拒绝，同目录其它条目不受影响。
+- 回复侧只做「剥 think」和「把推脱记一笔」；推脱识别是保守规则，宁可漏也不误报，更不会改回复。
 
 ## 目录
 
