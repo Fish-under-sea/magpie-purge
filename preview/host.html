@@ -43,6 +43,26 @@
   }
   frame.src = `/page/index.html?${pass}`
   document.getElementById('mode').textContent = `预览：mock 宿主 · ${theme === 'light' ? '浅色' : '深色'}`
+
+  // 真机里，插件页的 CSP 是 connect-src 'none'，页面自己 fetch 不到正文；
+  // 它只能请宿主窗口用窗口的身份去读页内文件（pagebridge 的 asset 调用）。
+  // 预览照做一份：`--csp=magpie` 时页面 fetch 会被拦，这里就是唯一通路。
+  addEventListener('message', async (ev) => {
+    if (ev.source !== frame.contentWindow) return
+    const m = ev.data
+    if (!m || m.magpie !== 1 || m.method !== 'asset') return
+    const reply = (payload) => frame.contentWindow?.postMessage({ magpie: 1, id: m.id, ...payload }, '*')
+    const want = String(m.params?.url || '')
+    // 只许读页面自己目录下的文件，和 magpie 的 pageAsset 同一条边界
+    if (!want.startsWith(location.origin + '/page/')) { reply({ error: 'No such call: asset' }); return }
+    try {
+      const res = await fetch(want, { cache: 'no-store' })
+      if (!res.ok) throw new Error(String(res.status))
+      reply({ result: { type: res.headers.get('content-type') || '', data: await res.arrayBuffer() } })
+    } catch (error) {
+      reply({ error: String(error?.message || error) })
+    }
+  })
   // 默认不选任何条目：右栏默认就是「注入组装」，那是最该看的一屏。
   // ?row=0 起指定第几条，用来看检查器（真机里由人点）。
   const rowParam = new URLSearchParams(location.search).get('row')

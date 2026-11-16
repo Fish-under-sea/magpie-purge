@@ -1,9 +1,10 @@
 // 破甲 · Purge 的页面逻辑。
 //
-// 页面在 magpie 的沙箱帧里：不能 fetch、读不到磁盘，只有三样东西可用——
+// 页面在 magpie 的沙箱帧里：不能 fetch、读不到磁盘，可用的是四样东西——
 //   1. window.PURGE_CATALOG：后端扫描后写下的快照（page/catalog.js）；
 //   2. magpie.options.get/set：这个插件在 plugins.json 里的设置；
-//   3. magpie.ready / onVisibility：主题与可见性。
+//   3. magpie.ready / onVisibility：主题与可见性；
+//   4. page/hostread.js：正文（catalog.json）——页面 fetch 被 CSP 拦时，请宿主窗口代取。
 // 所以页面只做「显示 + 改设置」，真正的清点与改写都在 hooks.js 那一侧。
 ;(() => {
   'use strict'
@@ -49,6 +50,8 @@
   let busy = false
   /** showingText 是「查看原文」的展开态；换条目时要收回去，否则新条目一进来就是展开的。 */
   let showingText = false
+  /** textNote 是「正文取不到」时点「查看原文」展开的说明；同样按条目收起。 */
+  let textNote = false
   /** editingText 是原文的编辑态；draftText 是编辑中的草稿，点保存才写回 options。 */
   let editingText = false
   let draftText = ''
@@ -120,9 +123,10 @@
    * bodyText 是「按需取回的正文」缓存。
    *
    * 快照里那份 .js 只有元数据（正文挪去了 catalog.json，见 lib/state.mjs 的注释）。
-   * 页面试着 fetch 一次 .json 把正文补回来：
-   *   - 能取到（CSP 允许读自身目录）：查看原文、编辑、导入计划全都照常；
-   *   - 取不到（connect-src 'none'）：列表与注入判定照常，只是原文不可用。
+   * 页面用 page/hostread.js 取一次 .json 把正文补回来：
+   *   - 直连 fetch 能过（宿主放开了 connect-src）：直接用；
+   *   - 直连被 CSP 拦下：请宿主窗口代取（真机走这条）；
+   *   - 两条都断：查看原文仍可点，点开说明原因，不假装成功。
    */
   const bodyText = new Map()
   /** textsState: 'idle' 没试过 / 'loading' 在取 / 'ready' 有正文 / 'blocked' 取不到 */
@@ -324,7 +328,7 @@
 
     const openView = () => {
       // 换条目就收起原文：从一条展开着的详情跳到另一条，不该自动展示别人的正文。
-      if (selected !== e.id) showingText = false
+      if (selected !== e.id) { showingText = false; textNote = false }
       selected = selected === e.id ? '' : e.id
       render()
     }
@@ -536,6 +540,7 @@
     if (!e) {
       // 没选中时让位给「组装预览」：右栏不留一片空白，那是最浪费的一屏。
       showingText = false
+      textNote = false
       editingText = false
       host.replaceChildren()
       return
@@ -549,10 +554,12 @@
     const enabled = isEnabled(e.id)
     const pinned = options.pinned?.[e.id]
     const history = Array.isArray(e.history) ? e.history : []
-    // 正文不在 .js 快照里（那是 Defender 判毒的来源），要等 fetch 把 .json 取回来。
-    // 取不到就明确说「原文不可用」，而不是给一个点了没反应的按钮。
+    // 正文不在 .js 快照里（那是 Defender 判毒的来源），要走宿主通道把 .json 要回来。
+    // 取不到就给一个能点的按钮：点开说明原因和文件在哪，绝不留一个点了没反应的死按钮。
     const text = typeof e.text === 'string' ? e.text : ''
     const canShowText = Boolean(text.trim())
+    /** stillLoading 是「正文还在路上」：只有这一小段才值得禁用按钮。 */
+    const stillLoading = textsState === 'idle' || textsState === 'loading'
 
     const actions = []
     // 人设才有「设为当前人设」；技能是「启用/停用」。混着写会让人以为技能能当人设用。
@@ -570,15 +577,22 @@
       }, enabled ? '停用' : '启用'))
     }
     // 「它到底写了什么」是判断要不要启用它的唯一依据：进来就看得到，不用去磁盘翻文件。
-    // 正文取不回来时给一个禁用的按钮 + 原因，而不是让按钮消失得不明不白。
+    // 正文还在路上时禁用它（并说明在取）；取不到时仍然可点，点开是一段说明而不是沉默。
     if (!canShowText && e.injectable) {
-      actions.push(el('button', {
-        type: 'button',
-        disabled: true,
-        title: textsState === 'blocked'
-          ? `原文取不到：${textsError || '当前 magpie 的 CSP 不允许页面读数据文件'}`
-          : '正在取原文…',
-      }, '查看原文'))
+      if (stillLoading) {
+        actions.push(el('button', {
+          type: 'button',
+          disabled: true,
+          title: '正在取原文…',
+        }, '查看原文'))
+      } else {
+        actions.push(el('button', {
+          type: 'button',
+          class: textNote ? 'quiet' : '',
+          'aria-expanded': textNote ? 'true' : 'false',
+          onclick: () => { textNote = !textNote; editingText = false; renderInspector() },
+        }, textNote ? '收起说明' : '查看原文'))
+      }
     }
     if (canShowText) {
       actions.push(el('button', {
@@ -782,6 +796,14 @@
       // 原文按注入形态显示：前面出现的技能段，正文会以「## 技能：<名字>」为界拼进去。
       showingText && canShowText
         ? (editingText ? textEditor(e) : el('pre', { class: 'text', text: text.length > 8000 ? `${text.slice(0, 8000)}\n…（共 ${text.length.toLocaleString('zh-CN')} 字符，后面省略）` : text }))
+        : null,
+      // 正文没取到时的说明：给出真正的原因和文件位置，让用户知道下一步去哪看。
+      textNote && !canShowText
+        ? el('section', { class: 'ins-callout is-material' },
+          el('h3', { text: '原文没取到' }),
+          el('p', { text: textsError || '宿主没有把正文交给页面。' }),
+          el('p', { class: 'note', text: `文件在：${e.source?.root === 'inline' ? '页面导入（存在 options 里，可点「编辑」看）' : (e.builtin ? `${builtinFolder(e)}/${e.source?.rel || ''}` : (e.source?.rel || '（快照里没有路径）'))}` }),
+        )
         : null,
     ].filter(Boolean))
   }
@@ -1212,6 +1234,7 @@
     if (!selected) return
     selected = ''
     showingText = false
+    textNote = false
     editingText = false
     render()
     // 焦点还给列表，别掉到 body 上让键盘用户迷路
@@ -1358,8 +1381,8 @@
    *
    * 快照的 .js 只有元数据：内置技能是一批红队手册，整段内联进脚本会被
    * Defender 判成 Trojan:Script/Wacatac.C!ml。正文单独写成 .json，
-   * 页面能 fetch 就补上（查看原文 / 编辑可用），不能就退化成只读目录。
-   * 这是能力探测，不是错误处理：CSP 拦下来是正常情况之一。
+   * 页面通过 page/hostread.js 取：先直连 fetch，被 CSP（connect-src 'none'）
+   * 拦下就让宿主窗口代取——那条通道是 magpie 自己给页面取页内文件用的。
    */
   async function loadTexts() {
     if (textsState === 'loading' || textsState === 'ready') return
@@ -1373,19 +1396,19 @@
         } catch { /* 落到下面按取不到处理 */ }
       }
       textsState = 'blocked'
-      textsError = '单文件预览里没有内嵌快照'
+      textsError = '单文件预览不带正文：它只用于看界面；真机里正文由宿主窗口代取'
       return
     }
     textsState = 'loading'
     try {
-      const res = await fetch(`catalog.json?t=${Date.now()}`, { cache: 'no-store' })
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const full = await res.json()
-      applyTexts(full)
+      const read = globalThis.PurgeHostRead?.readText
+      if (typeof read !== 'function') throw new Error('页面缺少读通道：page/hostread.js 没加载')
+      const body = await read(`catalog.json?t=${Date.now()}`)
+      applyTexts(JSON.parse(body))
     } catch (error) {
-      // 最常见的就是 CSP connect-src 'none'：不是插件坏了，是宿主只允许脚本这一条通道。
+      // 两条通道都断时 hostread.js 会把两个原因一起报出来，这里原样留给用户看。
       textsState = 'blocked'
-      textsError = '当前 magpie 的 CSP 不允许页面读数据文件（connect-src）'
+      textsError = String(error?.message || error)
       renderInspector()
     }
   }

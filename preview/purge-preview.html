@@ -2020,6 +2020,110 @@ textarea.text-edit:focus-visible {
 .pv-bar label{display:flex;align-items:center;gap:6px;color:var(--muted)}
 .pv-bar select{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:2px 6px}
 </style>
+<!-- 读正文的通道要排在 app.js 前面：app.js 启动就会用它取 catalog.json。 -->
+<script>
+// 页面读自己目录里的数据文件（正文快照 catalog.json）。
+//
+// 为什么不能直接 fetch：magpie 给插件页的 CSP 是 connect-src 'none'，fetch 一律
+// 被拦；正文又不能塞回 .js——内置技能是一批红队手册，整段内联进脚本会被 Defender
+// 判成 Trojan:Script/Wacatac.C!ml（见 lib/state.mjs 的 writeSnapshotIfChanged）。
+//
+// 于是走 magpie 自己给这类页面留的那条通道：页面桥在「整页内联」的页面上取脚本时，
+// 就是让宿主窗口用它的身份去读页内文件（pagebridge.js 的 asset 调用 →
+// pluginpages.js 的 answer → pageshare.js 的 pageAsset，只许读页面自己目录下的文件）。
+// 这里发同一种消息，把 catalog.json 要回来：CSP 拦得住页面，拦不住窗口自己的 fetch。
+//
+// 两条通道按顺序试，先快后慢：
+//   1. 直连 fetch——宿主哪天把 connect-src 放开到自身目录，这条最快；
+//   2. 宿主代取——现在的真机走这条。
+// 两条都断时把两个原因一起抛出去，而不是返回空串：空串会变成「按钮点了没反应」。
+;(() => {
+  /** SOURCE_TIMEOUT 是等宿主回话的上限：超过了就当这条路断了，别让页面卡在 loading。 */
+  const SOURCE_TIMEOUT = 5000
+  /** 页面自己的消息编号带前缀，避免和宿主桥的递增数字编号撞上。 */
+  const ID_PREFIX = 'purge-asset-'
+  let seq = 0
+  const pending = new Map()
+
+  /**
+   * asset 让宿主窗口把这个地址的文件取回来。
+   *
+   * params.url 必须是页面自己目录下的绝对地址：宿主那边会先校验前缀，
+   * 不是页内文件一律拒绝。
+   */
+  function asset(url, timeoutMs = SOURCE_TIMEOUT) {
+    const id = `${ID_PREFIX}${++seq}`
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        pending.delete(id)
+        reject(new Error(`宿主没有应答（${timeoutMs} ms）`))
+      }, timeoutMs)
+      pending.set(id, { resolve, reject, timer })
+      parent.postMessage({ magpie: 1, id, method: 'asset', params: { url } }, '*')
+    })
+  }
+
+  addEventListener('message', (ev) => {
+    const m = ev.data
+    if (!m || m.magpie !== 1 || typeof m.id !== 'string' || !m.id.startsWith(ID_PREFIX)) return
+    const waiting = pending.get(m.id)
+    if (!waiting) return
+    // 只有带 result 或 error 的才算回复：页面被单独打开时 parent 就是它自己，
+    // 自己发出去的请求会回到自己这里，没有结果的那些不能当成「取到了」。
+    if (!m.error && m.result === undefined) return
+    pending.delete(m.id)
+    clearTimeout(waiting.timer)
+    if (m.error) waiting.reject(new Error(String(m.error)))
+    else waiting.resolve(m.result)
+  })
+
+  /** bytesOf 把宿主给的内容解成字节：ArrayBuffer、Uint8Array 都认。 */
+  function bytesOf(blob) {
+    if (blob instanceof Uint8Array) return blob
+    if (typeof ArrayBuffer !== 'undefined' && blob instanceof ArrayBuffer) return new Uint8Array(blob)
+    return null
+  }
+
+  /**
+   * decode 把宿主返回的 {type, data} 解成文本。
+   *
+   * data 正常是 ArrayBuffer（pageAsset 的 arrayBuffer），但老宿主、或者以后
+   * 宿主直接给字符串，也要认——页面这边不该挑剔它的形状。
+   */
+  function decode(result) {
+    const data = result && result.data
+    if (typeof data === 'string') return data
+    const bytes = bytesOf(data)
+    if (!bytes) throw new Error('宿主给的内容读不出来')
+    return new TextDecoder('utf-8').decode(bytes)
+  }
+
+  /**
+   * readText 读页面目录里的一个文件，返回它的文本。
+   *
+   * path 相对页面自身地址（index.html），可以带 ?t= 这种防缓存参数。
+   */
+  async function readText(path, { timeoutMs = SOURCE_TIMEOUT } = {}) {
+    const url = new URL(String(path), location.href).href
+    let directError = null
+    try {
+      const res = await fetch(url, { cache: 'no-store' })
+      if (res.ok) return await res.text()
+      directError = new Error(`HTTP ${res.status}`)
+    } catch (error) {
+      directError = error
+    }
+    try {
+      return decode(await asset(url, timeoutMs))
+    } catch (hostError) {
+      // 两条原因都留着：用户看到的提示要能指向真正断掉的那条通道
+      throw new Error(`直连取正文失败（${directError?.message || directError}）；让宿主窗口代取也失败（${hostError?.message || hostError}）`)
+    }
+  }
+
+  globalThis.PurgeHostRead = { readText, asset, decode }
+})()
+</script>
 
 </head>
 <body>
@@ -2129,10 +2233,11 @@ textarea.text-edit:focus-visible {
 <script>
 // 破甲 · Purge 的页面逻辑。
 //
-// 页面在 magpie 的沙箱帧里：不能 fetch、读不到磁盘，只有三样东西可用——
+// 页面在 magpie 的沙箱帧里：不能 fetch、读不到磁盘，可用的是四样东西——
 //   1. window.PURGE_CATALOG：后端扫描后写下的快照（page/catalog.js）；
 //   2. magpie.options.get/set：这个插件在 plugins.json 里的设置；
-//   3. magpie.ready / onVisibility：主题与可见性。
+//   3. magpie.ready / onVisibility：主题与可见性；
+//   4. page/hostread.js：正文（catalog.json）——页面 fetch 被 CSP 拦时，请宿主窗口代取。
 // 所以页面只做「显示 + 改设置」，真正的清点与改写都在 hooks.js 那一侧。
 ;(() => {
   'use strict'
@@ -2178,6 +2283,8 @@ textarea.text-edit:focus-visible {
   let busy = false
   /** showingText 是「查看原文」的展开态；换条目时要收回去，否则新条目一进来就是展开的。 */
   let showingText = false
+  /** textNote 是「正文取不到」时点「查看原文」展开的说明；同样按条目收起。 */
+  let textNote = false
   /** editingText 是原文的编辑态；draftText 是编辑中的草稿，点保存才写回 options。 */
   let editingText = false
   let draftText = ''
@@ -2249,9 +2356,10 @@ textarea.text-edit:focus-visible {
    * bodyText 是「按需取回的正文」缓存。
    *
    * 快照里那份 .js 只有元数据（正文挪去了 catalog.json，见 lib/state.mjs 的注释）。
-   * 页面试着 fetch 一次 .json 把正文补回来：
-   *   - 能取到（CSP 允许读自身目录）：查看原文、编辑、导入计划全都照常；
-   *   - 取不到（connect-src 'none'）：列表与注入判定照常，只是原文不可用。
+   * 页面用 page/hostread.js 取一次 .json 把正文补回来：
+   *   - 直连 fetch 能过（宿主放开了 connect-src）：直接用；
+   *   - 直连被 CSP 拦下：请宿主窗口代取（真机走这条）；
+   *   - 两条都断：查看原文仍可点，点开说明原因，不假装成功。
    */
   const bodyText = new Map()
   /** textsState: 'idle' 没试过 / 'loading' 在取 / 'ready' 有正文 / 'blocked' 取不到 */
@@ -2453,7 +2561,7 @@ textarea.text-edit:focus-visible {
 
     const openView = () => {
       // 换条目就收起原文：从一条展开着的详情跳到另一条，不该自动展示别人的正文。
-      if (selected !== e.id) showingText = false
+      if (selected !== e.id) { showingText = false; textNote = false }
       selected = selected === e.id ? '' : e.id
       render()
     }
@@ -2665,6 +2773,7 @@ textarea.text-edit:focus-visible {
     if (!e) {
       // 没选中时让位给「组装预览」：右栏不留一片空白，那是最浪费的一屏。
       showingText = false
+      textNote = false
       editingText = false
       host.replaceChildren()
       return
@@ -2678,10 +2787,12 @@ textarea.text-edit:focus-visible {
     const enabled = isEnabled(e.id)
     const pinned = options.pinned?.[e.id]
     const history = Array.isArray(e.history) ? e.history : []
-    // 正文不在 .js 快照里（那是 Defender 判毒的来源），要等 fetch 把 .json 取回来。
-    // 取不到就明确说「原文不可用」，而不是给一个点了没反应的按钮。
+    // 正文不在 .js 快照里（那是 Defender 判毒的来源），要走宿主通道把 .json 要回来。
+    // 取不到就给一个能点的按钮：点开说明原因和文件在哪，绝不留一个点了没反应的死按钮。
     const text = typeof e.text === 'string' ? e.text : ''
     const canShowText = Boolean(text.trim())
+    /** stillLoading 是「正文还在路上」：只有这一小段才值得禁用按钮。 */
+    const stillLoading = textsState === 'idle' || textsState === 'loading'
 
     const actions = []
     // 人设才有「设为当前人设」；技能是「启用/停用」。混着写会让人以为技能能当人设用。
@@ -2699,15 +2810,22 @@ textarea.text-edit:focus-visible {
       }, enabled ? '停用' : '启用'))
     }
     // 「它到底写了什么」是判断要不要启用它的唯一依据：进来就看得到，不用去磁盘翻文件。
-    // 正文取不回来时给一个禁用的按钮 + 原因，而不是让按钮消失得不明不白。
+    // 正文还在路上时禁用它（并说明在取）；取不到时仍然可点，点开是一段说明而不是沉默。
     if (!canShowText && e.injectable) {
-      actions.push(el('button', {
-        type: 'button',
-        disabled: true,
-        title: textsState === 'blocked'
-          ? `原文取不到：${textsError || '当前 magpie 的 CSP 不允许页面读数据文件'}`
-          : '正在取原文…',
-      }, '查看原文'))
+      if (stillLoading) {
+        actions.push(el('button', {
+          type: 'button',
+          disabled: true,
+          title: '正在取原文…',
+        }, '查看原文'))
+      } else {
+        actions.push(el('button', {
+          type: 'button',
+          class: textNote ? 'quiet' : '',
+          'aria-expanded': textNote ? 'true' : 'false',
+          onclick: () => { textNote = !textNote; editingText = false; renderInspector() },
+        }, textNote ? '收起说明' : '查看原文'))
+      }
     }
     if (canShowText) {
       actions.push(el('button', {
@@ -2911,6 +3029,14 @@ textarea.text-edit:focus-visible {
       // 原文按注入形态显示：前面出现的技能段，正文会以「## 技能：<名字>」为界拼进去。
       showingText && canShowText
         ? (editingText ? textEditor(e) : el('pre', { class: 'text', text: text.length > 8000 ? `${text.slice(0, 8000)}\n…（共 ${text.length.toLocaleString('zh-CN')} 字符，后面省略）` : text }))
+        : null,
+      // 正文没取到时的说明：给出真正的原因和文件位置，让用户知道下一步去哪看。
+      textNote && !canShowText
+        ? el('section', { class: 'ins-callout is-material' },
+          el('h3', { text: '原文没取到' }),
+          el('p', { text: textsError || '宿主没有把正文交给页面。' }),
+          el('p', { class: 'note', text: `文件在：${e.source?.root === 'inline' ? '页面导入（存在 options 里，可点「编辑」看）' : (e.builtin ? `${builtinFolder(e)}/${e.source?.rel || ''}` : (e.source?.rel || '（快照里没有路径）'))}` }),
+        )
         : null,
     ].filter(Boolean))
   }
@@ -3341,6 +3467,7 @@ textarea.text-edit:focus-visible {
     if (!selected) return
     selected = ''
     showingText = false
+    textNote = false
     editingText = false
     render()
     // 焦点还给列表，别掉到 body 上让键盘用户迷路
@@ -3487,8 +3614,8 @@ textarea.text-edit:focus-visible {
    *
    * 快照的 .js 只有元数据：内置技能是一批红队手册，整段内联进脚本会被
    * Defender 判成 Trojan:Script/Wacatac.C!ml。正文单独写成 .json，
-   * 页面能 fetch 就补上（查看原文 / 编辑可用），不能就退化成只读目录。
-   * 这是能力探测，不是错误处理：CSP 拦下来是正常情况之一。
+   * 页面通过 page/hostread.js 取：先直连 fetch，被 CSP（connect-src 'none'）
+   * 拦下就让宿主窗口代取——那条通道是 magpie 自己给页面取页内文件用的。
    */
   async function loadTexts() {
     if (textsState === 'loading' || textsState === 'ready') return
@@ -3502,19 +3629,19 @@ textarea.text-edit:focus-visible {
         } catch { /* 落到下面按取不到处理 */ }
       }
       textsState = 'blocked'
-      textsError = '单文件预览里没有内嵌快照'
+      textsError = '单文件预览不带正文：它只用于看界面；真机里正文由宿主窗口代取'
       return
     }
     textsState = 'loading'
     try {
-      const res = await fetch(`catalog.json?t=${Date.now()}`, { cache: 'no-store' })
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const full = await res.json()
-      applyTexts(full)
+      const read = globalThis.PurgeHostRead?.readText
+      if (typeof read !== 'function') throw new Error('页面缺少读通道：page/hostread.js 没加载')
+      const body = await read(`catalog.json?t=${Date.now()}`)
+      applyTexts(JSON.parse(body))
     } catch (error) {
-      // 最常见的就是 CSP connect-src 'none'：不是插件坏了，是宿主只允许脚本这一条通道。
+      // 两条通道都断时 hostread.js 会把两个原因一起报出来，这里原样留给用户看。
       textsState = 'blocked'
-      textsError = '当前 magpie 的 CSP 不允许页面读数据文件（connect-src）'
+      textsError = String(error?.message || error)
       renderInspector()
     }
   }

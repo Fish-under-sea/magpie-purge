@@ -19,6 +19,7 @@ const html = read('page', 'index.html')
 const css = read('page', 'style.css')
 const app = read('page', 'app.js')
 const plan = read('page', 'plan.js')
+const hostread = read('page', 'hostread.js')
 const bridge = read('preview', 'bridge.js')
 // 品牌标记内联成 data URI：单文件不能有外部依赖，file:// 下取子文件会被拦。
 // 注意取的是 index.html 里真正在用的那张（card.png）；以前内联的是 icon.svg，
@@ -111,6 +112,8 @@ const out = html
   .replace(/<script src="app\.js[^"]*" defer><\/script>/, '')
   // plan.js 是纯计算、不碰 DOM，留在原位内联即可（app.js 依赖它）。
   .replace(/<script src="plan\.js[^"]*"><\/script>/, `<script>\n${plan}\n</script>`)
+  // hostread.js 同理：app.js 一启动就要用它取正文。
+  .replace(/<script src="hostread\.js[^"]*" defer><\/script>/, `<script>\n${hostread}\n</script>`)
   .replace('</body>', `<script>\n${app}\n</script>\n</body>`)
   .replace('src="card.png"', `src="${markUri}"`)
   .replace('<body>', `<body>\n${chrome}`)
