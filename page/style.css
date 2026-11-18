@@ -1081,9 +1081,86 @@ html[data-magpie-glass] .plan {
 
 /* 组装列表的每一行不再自带实底：父级画布已经在当玻璃，子块再盖一层实底就永远透不下来
    （宿主 2.4.4 修「看着缺玻璃」就是这一条）。左侧的类型色条与行分隔线保留。 */
-html[data-magpie-glass] .stack-row { background-color: transparent; }
-html[data-magpie-glass] .row:hover { background-color: color-mix(in oklab, var(--ink) 7%, transparent); }
+
+/* 卡里的「玻璃胶囊」：列表行、分组标题、组装行各自成一颗。
+   底色比卡片本身再实一档（pill = 文字面 +12%，最低 62%），这样胶囊从卡片上浮出来；
+   分组标题更实（≥88%），因为它是吸顶的，滚过去的行不能从字缝里透出来。 */
+html[data-magpie-glass] {
+  --purge-pill-fill: clamp(62%, calc(var(--purge-glass-ground-fill, 100%) + 12%), 100%);
+}
+html[data-magpie-glass] .row,
+html[data-magpie-glass] .stack-row {
+  background: color-mix(in srgb, var(--card) var(--purge-pill-fill), transparent);
+  border: 1px solid color-mix(in srgb, var(--line) 55%, transparent);
+  border-radius: 12px;
+  box-shadow: inset 0 1px 0 var(--purge-rim-line), inset 0 -1px 0 var(--purge-rim-shade);
+}
+html[data-magpie-glass] .row {
+  padding: 6px 12px;
+}
+html[data-magpie-glass] .group > .row { margin: 5px 0; }
+html[data-magpie-glass] .group > .row:last-child { margin-bottom: 8px; }
+html[data-magpie-glass] .list { border-top: 0; gap: 6px; }
+html[data-magpie-glass] .stack-view { border-top: 0; gap: 6px; }
+html[data-magpie-glass] .stack-row { padding: 10px 14px; }
+/* 组装行左侧那条类型色条：胶囊的圆角要把它一起裁圆，不能把高光边顶掉 */
+html[data-magpie-glass] .stack-row.is-persona { box-shadow: inset 3px 0 0 var(--kind-persona), inset 0 1px 0 var(--purge-rim-line), inset 0 -1px 0 var(--purge-rim-shade); }
+html[data-magpie-glass] .stack-row.is-skill { box-shadow: inset 3px 0 0 var(--kind-skill), inset 0 1px 0 var(--purge-rim-line), inset 0 -1px 0 var(--purge-rim-shade); }
+html[data-magpie-glass] .stack-row.is-host { box-shadow: inset 3px 0 0 var(--line), inset 0 1px 0 var(--purge-rim-line), inset 0 -1px 0 var(--purge-rim-shade); }
+
+/* 分组标题：不要胶囊，也不吸顶——吸顶就必须给它一层遮挡（实底或模糊），
+   实测透明底在带 mask 的滚动容器里兜不住滚过去的行。这一版选择「不渲染」：
+   透明、无边框、无圆角、无阴影、position 回到普通流，跟着列表一起滚走。 */
+html[data-magpie-glass] .group > .group-head {
+  position: static;
+  top: auto;
+  z-index: auto;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  padding: 10px 2px 4px;
+  margin: 2px 0 4px;
+  box-shadow: none;
+  text-shadow: none;
+}
+
+/* 详情里的「事实块」与「何时用」也做成玻璃胶囊（与列表行同一套：卡片底色 + 12px 圆角 + 内侧高光）。 */
+html[data-magpie-glass] .ins-facts,
+html[data-magpie-glass] .ins-callout {
+  background: color-mix(in srgb, var(--card) var(--purge-pill-fill), transparent);
+  border: 1px solid color-mix(in srgb, var(--line) 55%, transparent);
+  border-radius: 12px;
+  box-shadow: inset 0 1px 0 var(--purge-rim-line), inset 0 -1px 0 var(--purge-rim-shade);
+}
+
+/* hover / 选中不再换底色（那会把胶囊底一并抹掉），改成描边加重。 */
+html[data-magpie-glass] .row:hover {
+  background: color-mix(in srgb, var(--card) var(--purge-pill-fill), transparent);
+  border-color: color-mix(in srgb, var(--muted) 55%, var(--line));
+}
+html[data-magpie-glass] .row[aria-selected="true"] {
+  background: color-mix(in srgb, var(--card) var(--purge-pill-fill), transparent);
+  border-color: color-mix(in srgb, var(--ink) 32%, var(--line));
+}
 html[data-magpie-glass] .seg-opt:hover { background-color: color-mix(in oklab, var(--ink) 6%, transparent); }
+
+/* 三块「以前没有壳」的区域改成玻璃卡：左列（搜索 + 计数 + 列表）、右列（组装 + 清单）、
+   底部导入条。玻璃关着时这些规则不生效，仍是原来的扁平工作台；开着时它们浮在壁纸上，
+   列表行保持透明（卡片本身就是它们的底），只有卡片自己有边框与圆角。 */
+html[data-magpie-glass] .rail,
+html[data-magpie-glass] .panel,
+html[data-magpie-glass] .foot {
+  position: relative;
+  background: color-mix(in srgb, var(--card) var(--purge-glass-ground-fill, 100%), transparent);
+  border: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
+  border-radius: 14px;
+  padding: 12px 14px;
+}
+/* 卡片之间留 16：原来 24 是给两个无壳栏目留白，有壳之后太散。 */
+html[data-magpie-glass] .work { gap: 16px; }
+html[data-magpie-glass] .foot { margin-top: 16px; }
+/* 状态条的圆角跟卡片统一（原来 10 是「横条」的尺度，成卡后 14 才是一套）。 */
+html[data-magpie-glass] .plan { border-radius: 14px; }
 
 /* 浮层：详情浮层与模式下拉跟「浮层」区域。透明到 70% 以下会把正文扔到壁纸上，
    所以下限由 glass.js 给；这里的模糊是真能生效的一处——浮层背后就是本页自己的内容。 */
@@ -1117,28 +1194,26 @@ html[data-magpie-glass] :is(
 /* 柔光与高光边：只在「模糊 + color-mix 都支持」时出现。
    mask 不支持时那条渐变会糊满整个面，所以整组一起放进 @supports。 */
 @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) and (background: color-mix(in srgb, red, transparent)) {
-  /* 成块的文字面：高光边压在边框内侧，不占空间也不拦点击 */
+  /* 成块的文字面与三张卡片：高光边压在边框内侧，不占空间也不拦点击 */
   html[data-magpie-glass] .plan,
   html[data-magpie-glass] .modal-sheet,
-  html[data-magpie-glass] .seg-menu {
+  html[data-magpie-glass] .seg-menu,
+  html[data-magpie-glass] .rail,
+  html[data-magpie-glass] .panel,
+  html[data-magpie-glass] .foot {
     box-shadow: inset 0 1px 0 var(--purge-rim-line), inset 0 -1px 0 var(--purge-rim-shade);
   }
   /* 浮层与状态条的边框交给渐变高光边画，避免两条线叠在一起 */
   html[data-magpie-glass] .modal-sheet { border-color: transparent; }
   html[data-magpie-glass] .seg-menu { border-color: transparent; }
 
-  /* 吸顶的分组标题：它压在滚动的行上面，必须自带一层底，否则滚过去的字会透出来。
-     这层底与画布同一个数字，再加同一份模糊——是本页唯一「真模糊」的滚动面。 */
-  html[data-magpie-glass] .group > .group-head {
-    background: color-mix(in srgb, var(--bg) var(--purge-glass-canvas-fill, 100%), transparent);
-    -webkit-backdrop-filter: blur(var(--purge-glass-canvas-blur, 0px)) saturate(180%) brightness(1.06);
-    backdrop-filter: blur(var(--purge-glass-canvas-blur, 0px)) saturate(180%) brightness(1.06);
-  }
-
   /* 柔光：左上冷光 + 右下壳光。只给大面，小控件上会显脏。 */
   html[data-magpie-glass] .plan::before,
   html[data-magpie-glass] .modal-sheet::before,
-  html[data-magpie-glass] .seg-menu::before {
+  html[data-magpie-glass] .seg-menu::before,
+  html[data-magpie-glass] .rail::before,
+  html[data-magpie-glass] .panel::before,
+  html[data-magpie-glass] .foot::before {
     content: "";
     position: absolute;
     inset: 0;
@@ -1191,7 +1266,12 @@ html[data-glass="deep"] .modal-sheet {
   html[data-magpie-glass] .plan,
   html[data-magpie-glass] .modal-sheet,
   html[data-magpie-glass] .seg-menu,
-  html[data-magpie-glass] .group > .group-head {
+  html[data-magpie-glass] .rail,
+  html[data-magpie-glass] .panel,
+  html[data-magpie-glass] .foot,
+  html[data-magpie-glass] .ins-facts,
+  html[data-magpie-glass] .ins-callout,
+  html[data-magpie-glass] .row {
     background: var(--card);
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
@@ -1205,7 +1285,12 @@ html[data-glass="deep"] .modal-sheet {
   html[data-magpie-glass] .plan,
   html[data-magpie-glass] .modal-sheet,
   html[data-magpie-glass] .seg-menu,
-  html[data-magpie-glass] .group > .group-head,
+  html[data-magpie-glass] .rail,
+  html[data-magpie-glass] .panel,
+  html[data-magpie-glass] .foot,
+  html[data-magpie-glass] .ins-facts,
+  html[data-magpie-glass] .ins-callout,
+  html[data-magpie-glass] .row,
   html[data-magpie-glass] .stack-row {
     background: var(--card);
     -webkit-backdrop-filter: none;
@@ -1218,5 +1303,8 @@ html[data-glass="deep"] .modal-sheet {
   html[data-magpie-glass] .modal-sheet::before,
   html[data-magpie-glass] .modal-sheet::after,
   html[data-magpie-glass] .seg-menu::before,
-  html[data-magpie-glass] .seg-menu::after { content: none; }
+  html[data-magpie-glass] .seg-menu::after,
+  html[data-magpie-glass] .rail::before,
+  html[data-magpie-glass] .panel::before,
+  html[data-magpie-glass] .foot::before { content: none; }
 }

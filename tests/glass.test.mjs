@@ -208,19 +208,25 @@ test('宿主的 ready 里带玻璃：hello 回来时补套一次，不等下一�
   assert.equal(root.props['--purge-glass-canvas-fill'], '62%')
 })
 
-test('CSS 侧只认 --purge-glass-*：页面样式不再直接读宿主的玻璃变量', () => {
+test('CSS 侧只认 glass.js 写出的那组变量', () => {
   const css = readFileSync(join(here, '..', 'page', 'style.css'), 'utf8')
+  const known = [
+    '--purge-glass-canvas-fill',
+    '--purge-glass-canvas-blur',
+    '--purge-glass-ground-fill',
+    '--purge-glass-overlay-fill',
+    '--purge-glass-overlay-blur',
+    '--purge-glass-control-fill',
+  ]
   const used = new Set([...css.matchAll(/--purge-glass-[a-z-]+/g)].map((m) => m[0]))
-  assert.deepEqual(
-    [...used].sort(),
-    [
-      '--purge-glass-canvas-blur',
-      '--purge-glass-canvas-fill',
-      '--purge-glass-control-fill',
-      '--purge-glass-ground-fill',
-      '--purge-glass-overlay-blur',
-      '--purge-glass-overlay-fill',
-    ],
-    '样式里用到的页面玻璃变量应该与 glass.js 写出的那组一致',
-  )
+  assert.deepEqual([...used].filter((n) => !known.includes(n)), [], '样式里出现了 glass.js 不写的变量')
+  // 四个「底」必须用上；canvas-blur 目前没有面需要它（画布跨文档模糊不可用、吸顶标题已改不吸顶），允许不用。
+  for (const need of [
+    '--purge-glass-canvas-fill',
+    '--purge-glass-ground-fill',
+    '--purge-glass-overlay-fill',
+    '--purge-glass-control-fill',
+  ]) {
+    assert.ok(used.has(need), `样式应该用到 ${need}`)
+  }
 })
