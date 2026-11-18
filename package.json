@@ -1,6 +1,6 @@
 {
   "name": "@fish-under-sea/magpie-purge",
-  "version": "0.8.1",
+  "version": "0.8.2",
   "description": "magpie-purge: a magpie page plugin that treats a local purge folder as a free plugin/skill source, inspects and validates what is in it, and rewrites the gateway's system prompt by mode (off / strict / replace / append).",
   "type": "module",
   "license": "MIT",

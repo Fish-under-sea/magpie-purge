@@ -80,14 +80,14 @@ test('宿主的数字照抄：轻透 62/26 原样进画布，文字面跟着它'
   assert.equal(root.props['--purge-glass-control-fill'], '92%')
 })
 
-test('文字面有下限：内容区拖到 40 时，成块文字仍留 55% 的底', () => {
+test('数字一律照抄，不加下限：内容区 40 时卡片就是 40，胶囊靠 CSS 的 10% 淡化', () => {
   const root = fakeRoot()
   const state = glass.apply(root, provider({ content: 40, overlay: 30, control: 20 }))
   assert.equal(state.level, 'deep', '内容区低于 60% 就该进 deep')
-  assert.equal(root.props['--purge-glass-canvas-fill'], '40%', '画布照抄用户数字，不加下限')
-  assert.equal(root.props['--purge-glass-ground-fill'], '55%', '文字块保底 55%')
-  assert.equal(root.props['--purge-glass-overlay-fill'], '70%', '浮层保底 70%')
-  assert.equal(root.props['--purge-glass-control-fill'], '45%', '控件保底 45%')
+  assert.equal(root.props['--purge-glass-canvas-fill'], '40%')
+  assert.equal(root.props['--purge-glass-ground-fill'], '40%', '面照抄 content，不抬下限')
+  assert.equal(root.props['--purge-glass-overlay-fill'], '30%', '浮层照抄 overlay')
+  assert.equal(root.props['--purge-glass-control-fill'], '20%', '控件照抄 control（CSS 侧 ×0.1）')
 })
 
 test('全透（0% / 18px）也判定为 deep，但画布就是 0%', () => {
@@ -120,7 +120,7 @@ test('越界与脏值收敛：fill 夹到 0–100，blur 夹到 0–40，非数�
   })
   assert.equal(root.props['--purge-glass-canvas-fill'], '100%')
   assert.equal(root.props['--purge-glass-canvas-blur'], '40px')
-  assert.equal(root.props['--purge-glass-overlay-fill'], '70%', '负值按 0，再抬到浮层下限')
+  assert.equal(root.props['--purge-glass-overlay-fill'], '0%', '负值按 0，直接透')
   assert.equal(root.props['--purge-glass-control-fill'], '62%', '字符串数字要认')
   // 控件不传 blur：宿主也只给控件底色与高光边，小方块上再糊一层会显脏
   assert.equal(root.props['--purge-glass-control-blur'], undefined)
@@ -220,9 +220,8 @@ test('CSS 侧只认 glass.js 写出的那组变量', () => {
   ]
   const used = new Set([...css.matchAll(/--purge-glass-[a-z-]+/g)].map((m) => m[0]))
   assert.deepEqual([...used].filter((n) => !known.includes(n)), [], '样式里出现了 glass.js 不写的变量')
-  // 四个「底」必须用上；canvas-blur 目前没有面需要它（画布跨文档模糊不可用、吸顶标题已改不吸顶），允许不用。
+  // 三个「面」的数字必须用上；canvas-fill 目前没有面需要它（画布整块透明，交给宿主壁纸），允许不用。
   for (const need of [
-    '--purge-glass-canvas-fill',
     '--purge-glass-ground-fill',
     '--purge-glass-overlay-fill',
     '--purge-glass-control-fill',

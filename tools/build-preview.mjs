@@ -116,8 +116,11 @@ const out = html
 /* 单文件预览没有宿主帧：壁纸垫在画布下面，画布的不透明度才看得出效果。
    真机里壁纸画在 magpie 的 body 上（带 --wall-veil 遮罩），这里用两块柔光渐变代它；
    画布这一层照抄页面自己的写法，玻璃关闭（100%）时它盖住壁纸，与旧版一致。 */
-html{background:linear-gradient(color-mix(in srgb,var(--bg) var(--purge-glass-canvas-fill,100%),transparent),color-mix(in srgb,var(--bg) var(--purge-glass-canvas-fill,100%),transparent)),linear-gradient(color-mix(in srgb,#0f1115 45%,transparent),color-mix(in srgb,#0f1115 45%,transparent)),radial-gradient(900px 700px at 14% 0%,#3d5fa8 0%,transparent 60%),radial-gradient(800px 620px at 96% 100%,#8c3a5f 0%,transparent 56%),radial-gradient(680px 520px at 82% 6%,#1f7a6a 0%,transparent 52%),linear-gradient(160deg,#0b0d14,#1b2233)}
-html[data-theme="light"]{background:linear-gradient(color-mix(in srgb,var(--bg) var(--purge-glass-canvas-fill,100%),transparent),color-mix(in srgb,var(--bg) var(--purge-glass-canvas-fill,100%),transparent)),linear-gradient(color-mix(in srgb,#f4f4f2 45%,transparent),color-mix(in srgb,#f4f4f2 45%,transparent)),radial-gradient(900px 700px at 12% 0%,#b9d4ff 0%,transparent 60%),radial-gradient(800px 620px at 96% 100%,#ffc2d4 0%,transparent 56%),radial-gradient(680px 520px at 82% 6%,#ffe4b8 0%,transparent 52%),linear-gradient(160deg,#fdfdff,#eef2fb)}
+/* 单文件预览没有宿主帧：玻璃开着时给 html 垫「遮罩 + 壁纸」两层，画布本身全透。
+   真机里壁纸画在 magpie 的 body 上（带 --wall-veil 遮罩），页面 html 是透明的；
+   这里用同样的层序模拟，玻璃关闭时走页面自己的 html{background:var(--bg)}。 */
+html[data-magpie-glass]{background:linear-gradient(color-mix(in srgb,#0f1115 45%,transparent),color-mix(in srgb,#0f1115 45%,transparent)),radial-gradient(900px 700px at 14% 0%,#3d5fa8 0%,transparent 60%),radial-gradient(800px 620px at 96% 100%,#8c3a5f 0%,transparent 56%),radial-gradient(680px 520px at 82% 6%,#1f7a6a 0%,transparent 52%),linear-gradient(160deg,#0b0d14,#1b2233)}
+html[data-theme="light"][data-magpie-glass]{background:linear-gradient(color-mix(in srgb,#f4f4f2 45%,transparent),color-mix(in srgb,#f4f4f2 45%,transparent)),radial-gradient(900px 700px at 12% 0%,#b9d4ff 0%,transparent 60%),radial-gradient(800px 620px at 96% 100%,#ffc2d4 0%,transparent 56%),radial-gradient(680px 520px at 82% 6%,#ffe4b8 0%,transparent 52%),linear-gradient(160deg,#fdfdff,#eef2fb)}
 </style>`)
   .replace('<script src="_magpie/bridge.js"></script>', `<script>\n${bridge.replace(
     'new URLSearchParams(location.search)',

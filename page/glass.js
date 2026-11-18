@@ -19,8 +19,6 @@
 ;(() => {
   /** REGIONS 是宿主下发的四个区域名；sidebar 本页没有独立导航面，只留作完整性。 */
   const REGIONS = ['sidebar', 'content', 'overlay', 'control']
-  /** 文字块、浮层、控件的下限（百分数）。低于它就不透到读不清；高于它就照宿主走。 */
-  const FLOOR = { ground: 55, overlay: 70, control: 45 }
   /** DEEP_BELOW：主界面不透明度低于这个值，就认为「壁纸真的透进来了」，进 deep 态。 */
   const DEEP_BELOW = 60
 
@@ -75,7 +73,8 @@
   /**
    * tokensOf 算出页面要写的 CSS 变量。
    *
-   * 画布拿用户原值（透多少是他的选择）；文字块、浮层、控件各自抬到下限。
+   * 数字一律照抄宿主，不加下限——这样才跟官方插件页（checkin-relay-probe）同一观感：
+   * 「面」用 --card × 主界面数字，胶囊与控件用 --fg 的 10% × 控件数字（乘法在 CSS 里做）。
    * 控件的 blur 不传：宿主自己也只给控件底色与高光边，小方块上糊一层会显脏。
    */
   function tokensOf(glass) {
@@ -83,10 +82,10 @@
     return {
       '--purge-glass-canvas-fill': `${content.fill}%`,
       '--purge-glass-canvas-blur': `${content.blur}px`,
-      '--purge-glass-ground-fill': `${Math.max(content.fill, FLOOR.ground)}%`,
-      '--purge-glass-overlay-fill': `${Math.max(overlay.fill, FLOOR.overlay)}%`,
+      '--purge-glass-ground-fill': `${content.fill}%`,
+      '--purge-glass-overlay-fill': `${overlay.fill}%`,
       '--purge-glass-overlay-blur': `${overlay.blur}px`,
-      '--purge-glass-control-fill': `${Math.max(control.fill, FLOOR.control)}%`,
+      '--purge-glass-control-fill': `${control.fill}%`,
     }
   }
 
@@ -148,7 +147,7 @@
     return session
   }
 
-  globalThis.PurgeGlass = { REGIONS, FLOOR, DEEP_BELOW, normalize, levelOf, tokensOf, apply, attach }
+  globalThis.PurgeGlass = { REGIONS, DEEP_BELOW, normalize, levelOf, tokensOf, apply, attach }
 
   // 浏览器里自动挂上：页面只加一个 <script>，不必等 app.js 启动。
   // （测试用 Function 跑这份脚本时没有 document，因此不会自动执行。）
