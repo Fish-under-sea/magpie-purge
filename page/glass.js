@@ -56,6 +56,10 @@
         blur: num(part.blur, 0, 0, 40),
       }
     }
+    // 宿主 pagebridge 目前只下发 sidebar / content / overlay 三个区域（control 还没进去）。
+    // 少这一块时，控件跟「主界面」走，而不是退回 100% 实底——否则真机上按钮永远是实心块，
+    // 看着跟玻璃没接上一样。
+    if (!(source.control && typeof source.control === 'object')) regions.control = { ...regions.content }
     return { on: value.on === true, regions }
   }
 

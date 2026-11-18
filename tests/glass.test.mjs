@@ -127,15 +127,15 @@ test('越界与脏值收敛：fill 夹到 0–100，blur 夹到 0–40，非数�
   assert.equal(root.props['--purge-glass-ground-fill'], '100%', 'sidebar 不参与页面的底')
 })
 
-test('缺区域时按实底处理：不知道的数字不能猜成半透', () => {
-  // 真机四个区域一次全给；缺字段只可能是因为换了宿主或页面被单独打开。
-  // 这时把缺的那块当 100%（实底）最保守：宁可少透一点，也不让文字落到壁纸上。
+test('缺区域时按实底处理；宿主只给三个区域时控件跟主界面走', () => {
+  // 真机 pagebridge 目前只下发 sidebar / content / overlay；control 缺席时不能退回实底，
+  // 否则按钮永远是实心块，看着跟玻璃没接上。
   const root = fakeRoot()
   const state = glass.apply(root, { on: true, regions: { content: { fill: 70, blur: 8 } } })
   assert.equal(state.level, 'lite')
   assert.equal(root.props['--purge-glass-canvas-fill'], '70%')
-  assert.equal(root.props['--purge-glass-overlay-fill'], '100%')
-  assert.equal(root.props['--purge-glass-control-fill'], '100%')
+  assert.equal(root.props['--purge-glass-overlay-fill'], '100%', 'overlay 缺席按实底')
+  assert.equal(root.props['--purge-glass-control-fill'], '70%', 'control 缺席跟 content 走')
 })
 
 test('on 开着但四个区域都是实底：按 off 处理，别让页面白挂一层', () => {

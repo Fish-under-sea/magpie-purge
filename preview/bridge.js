@@ -4,15 +4,23 @@
 ;(() => {
   const q = new URLSearchParams(location.search)
   const dark = (q.get('theme') || 'dark') !== 'light'
+  // 真机 pagebridge 下发的官方主题 token（internal/gui/pluginpages.js 的 TOKENS 全表）：
+  // 这里照抄同一组名字与取值，预览才不会「颜色对不上真机」。
   const tokens = dark
     ? {
-        bg: '#15171c', fg: '#e6e7ea', muted: '#8d93a0', card: '#1c1f26', line: '#2c313b',
-        accent: '#7c8cff', 'accent-soft': '#232844', code: '#a9b1c6',
+        bg: '#1a1a1e', card: '#232327', line: '#333339',
+        fg: '#ededf1', 'fg-2': '#b9b9c1', muted: '#8b8b94', faint: '#56565f',
+        accent: '#a5b4fc', 'accent-soft': '#2b2c47', 'accent-fg': '#14142a',
+        green: '#6fd99b', red: '#f28b82', amber: '#f2b544',
+        code: 'ui-monospace, "SF Mono", Menlo, Consolas, monospace',
         font: '-apple-system, "Segoe UI", "Noto Sans SC", system-ui, sans-serif',
       }
     : {
-        bg: '#fbfbf9', fg: '#1c1d21', muted: '#6b7280', card: '#ffffff', line: '#e3e3e6',
-        accent: '#3563e9', 'accent-soft': '#e6edfd', code: '#4b5162',
+        bg: '#f4f4f6', card: '#ffffff', line: '#e3e3e8',
+        fg: '#1c1c21', 'fg-2': '#4b4b53', muted: '#85858d', faint: '#b9b9c2',
+        accent: '#4f46e5', 'accent-soft': '#eeedfd', 'accent-fg': '#ffffff',
+        green: '#189a58', red: '#d64545', amber: '#b45309',
+        code: 'ui-monospace, "SF Mono", Menlo, Consolas, monospace',
         font: '-apple-system, "Segoe UI", "Noto Sans SC", system-ui, sans-serif',
       }
 

@@ -423,6 +423,12 @@ npm run preview:serve            # → http://127.0.0.1:55172
   仍是原来的扁平工作台。
 - 壁纸画在宿主文档的 `body` 上，而插件页在沙箱帧里：**画布只能透、不能模糊**（跨文档模糊浏览器不给）。
   真吃到模糊的是详情浮层、模式下拉、吸顶分组标题——它们背后是本页内容。
+- **颜色全部接官方 token**：正文 `--magpie-fg`、次要 `--magpie-muted`、底色 `--magpie-bg`、卡面
+  `--magpie-card`、分隔 `--magpie-line`、字体 `--magpie-font`/`--magpie-code`；强调色 `--magpie-accent`、
+  强调色上的文字 `--magpie-accent-fg`、三态用 `--magpie-green`/`--magpie-red`/`--magpie-amber`，
+  页面里不再写死任何主题色（人设＝强调色、技能＝amber、素材＝muted）。宿主换主题或强调色，整页跟着变。
+- **控件的兜底**：宿主 `pagebridge` 目前只下发 `sidebar / content / overlay` 三个区域，`control` 缺席时
+  控件跟「主界面」同一组数字走，不会退回 100% 实底。
 - 降级：`@supports not (backdrop-filter)`、`prefers-reduced-transparency: reduce`、
   `forced-colors: active` 一律回实底并撤掉柔光/高光边。
 
@@ -459,6 +465,7 @@ node tools/scan.mjs --json
 
 | 版本 | 要点 |
 | --- | --- |
+| `0.8.1` | 颜色全部接官方主题 token：强调色 `--magpie-accent`、强调色上的文字 `--magpie-accent-fg`、三态 `--magpie-green/red`、技能色 `--magpie-amber`，页面不再写死莓红；宿主只下发三个玻璃区（无 `control`）时控件跟「主界面」数字走，不再恒为实底 |
 | `0.8.0` | 玻璃卡片化：左列（搜索 + 列表）、右列（组装清单）、底部导入条在玻璃开着时各成一张玻璃卡（圆角 14、内边距 12/14、列间距 16）；卡内的列表行与组装行各成一颗玻璃胶囊（12px 圆角），详情里的「何时用 / 事实块」也是胶囊，分组标题保持透明且不吸顶；玻璃关着仍是扁平工作台 |
 | `0.7.0` | 适配 magpie 液态玻璃：页面画布与成块文字面跟随「主界面」、详情浮层与模式下拉跟随「浮层」、控件跟随「控件」（`page/glass.js`）；玻璃关闭时与旧版逐像素一致，减弱透明/高对比度回实底；预览新增 `?glass=` 与垫底壁纸 |
 | `0.6.5` | 修「查看原文」对所有条目都点不动：正文取回先试 `fetch`，被 CSP 拦下就让宿主窗口代取（`page/hostread.js`）；两条都断时按钮仍可点，点开写明原因与文件位置 |

@@ -12,38 +12,22 @@
   --line: var(--magpie-line, #e3e3e6);
   --mono: var(--magpie-code, ui-monospace, "Cascadia Mono", "SF Mono", Menlo, monospace);
 
-  /* 语义色：人设莓红 / 技能石板青 / 强调莓红（原先是紫 + 青蓝）。
-     下面三组是深色主题下的值；浅色主题在文件末尾有另一套更沉的，
-     同一套色相在浅底上不压深就会糊成一片。 */
-  --kind-persona: #c06076;
-  --kind-skill: #4f8895;
-  --kind-material: #8a7f70;
-  --accent: #b04d66;
-  --ok: #2f8f5b;
-  --danger: #c25556;
+  /* 语义色：全部接宿主的官方色 token，不再写死。
+     人设 = 主题强调色，技能 = 琥珀（warning 系），素材 = muted；
+     三态用 green / red。宿主换主题或强调色时整页跟着走。 */
+  --kind-persona: var(--magpie-accent, #c06076);
+  --kind-skill: var(--magpie-amber, #4f8895);
+  --kind-material: var(--magpie-muted, #8a7f70);
+  --accent: var(--magpie-accent, #b04d66);
+  --accent-fg: var(--magpie-accent-fg, #fff);
+  --ok: var(--magpie-green, #2f8f5b);
+  --danger: var(--magpie-red, #c25556);
 
   /* 选中态与焦点环一律用中性色，不用强调色。
      强调色留给「真的要按」的动作（确认注入、保存），
      到处都是紫色高亮时，反而看不出哪个才是主操作，而且很吵。 */
   --focus: color-mix(in oklab, var(--ink) 45%, transparent);
   --selected: color-mix(in oklab, var(--ink) 8%, transparent);
-}
-
-/* 浅色主题：同一套色相往深里压一档。
-   莓红与石板青在浅底上原样用会发灰、对比度掉到看不清，
-   所以整体下沉，而不是换一套颜色。 */
-[data-theme="light"] {
-  --kind-persona: #a03e55;
-  --kind-skill: #2f6b76;
-  --accent: #8f3350;
-}
-/* 宿主没给 data-theme 时，按系统偏好兜底 */
-@media (prefers-color-scheme: light) {
-  :root:not([data-theme="dark"]) {
-    --kind-persona: #a03e55;
-    --kind-skill: #2f6b76;
-    --accent: #8f3350;
-  }
 }
 
 * { box-sizing: border-box; }
@@ -122,7 +106,7 @@ button {
 }
 button:hover:not(:disabled) { border-color: var(--muted); }
 button:disabled { opacity: .5; cursor: default; }
-button.primary { background: var(--accent); border-color: transparent; color: #fff; }
+button.primary { background: var(--accent); border-color: transparent; color: var(--accent-fg); }
 button.quiet { background: transparent; }
 button.danger { color: var(--danger); border-color: color-mix(in oklab, var(--danger) 40%, var(--line)); }
 
@@ -1140,7 +1124,7 @@ html[data-magpie-glass] .row:hover {
 }
 html[data-magpie-glass] .row[aria-selected="true"] {
   background: color-mix(in srgb, var(--card) var(--purge-pill-fill), transparent);
-  border-color: color-mix(in srgb, var(--ink) 32%, var(--line));
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
 }
 html[data-magpie-glass] .seg-opt:hover { background-color: color-mix(in oklab, var(--ink) 6%, transparent); }
 
