@@ -2201,7 +2201,19 @@ html[data-magpie-glass] :is(
     mask-composite: exclude;
     opacity: .7;
   }
-  /* 行与事实块：只补一圈渐变高光边，不加柔光（小面积上会脏）。 */
+  /* 行与事实块：补一圈渐变高光边 + 一层很淡的左上冷光（与卡片同一套光学，弱一档）。 */
+  html[data-magpie-glass] .row::before,
+  html[data-magpie-glass] .stack-row::before,
+  html[data-magpie-glass] .ins-facts::before,
+  html[data-magpie-glass] .ins-callout::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    background: radial-gradient(120% 95% at 10% -25%, var(--purge-sheen-a), transparent 58%);
+    opacity: .55;
+  }
   html[data-magpie-glass] .row::after,
   html[data-magpie-glass] .stack-row::after,
   html[data-magpie-glass] .ins-facts::after,
@@ -2219,6 +2231,28 @@ html[data-magpie-glass] :is(
     mask-composite: exclude;
     opacity: .6;
   }
+}
+
+/* 玻璃下不要给滚动区加 mask / opacity：它们会建立 backdrop root，
+   里面的行再写 backdrop-filter 也采不到壁纸，玻璃就退化成「半透平涂」。
+   代价是底部淡出没了——行本身有圆角，硬切不再切出半截。 */
+html[data-magpie-glass] .list,
+html[data-magpie-glass] .stack-view {
+  mask-image: none;
+  -webkit-mask-image: none;
+}
+html[data-magpie-glass] .stack-view.is-preview { opacity: 1; }
+
+/* 小控件（状态徽标、类型标签、模式下拉）也吃同一份玻璃：--fg 10% + 描边 + 内侧高光。 */
+html[data-magpie-glass] .badge,
+html[data-magpie-glass] .kind,
+html[data-magpie-glass] .ins-badge,
+html[data-magpie-glass] .seg {
+  background-color: var(--purge-pill);
+  border-color: color-mix(in srgb, var(--ink) 14%, transparent);
+  -webkit-backdrop-filter: blur(var(--purge-glass-control-blur, 0px)) saturate(180%) brightness(1.06);
+  backdrop-filter: blur(var(--purge-glass-control-blur, 0px)) saturate(180%) brightness(1.06);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--ink) 20%, transparent);
 }
 
 /* 降级一：环境不支持背景模糊 → 全部回实底，柔光与高光边一起撤掉。 */
