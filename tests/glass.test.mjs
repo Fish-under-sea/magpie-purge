@@ -122,8 +122,7 @@ test('越界与脏值收敛：fill 夹到 0–100，blur 夹到 0–40，非数�
   assert.equal(root.props['--purge-glass-canvas-blur'], '40px')
   assert.equal(root.props['--purge-glass-overlay-fill'], '0%', '负值按 0，直接透')
   assert.equal(root.props['--purge-glass-control-fill'], '62%', '字符串数字要认')
-  // 控件不传 blur：宿主也只给控件底色与高光边，小方块上再糊一层会显脏
-  assert.equal(root.props['--purge-glass-control-blur'], undefined)
+  assert.equal(root.props['--purge-glass-control-blur'], '0px', '非数字 blur 回 0')
   assert.equal(root.props['--purge-glass-ground-fill'], '100%', 'sidebar 不参与页面的底')
 })
 
@@ -214,9 +213,11 @@ test('CSS 侧只认 glass.js 写出的那组变量', () => {
     '--purge-glass-canvas-fill',
     '--purge-glass-canvas-blur',
     '--purge-glass-ground-fill',
+    '--purge-glass-ground-blur',
     '--purge-glass-overlay-fill',
     '--purge-glass-overlay-blur',
     '--purge-glass-control-fill',
+    '--purge-glass-control-blur',
   ]
   const used = new Set([...css.matchAll(/--purge-glass-[a-z-]+/g)].map((m) => m[0]))
   assert.deepEqual([...used].filter((n) => !known.includes(n)), [], '样式里出现了 glass.js 不写的变量')

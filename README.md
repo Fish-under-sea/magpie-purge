@@ -412,22 +412,22 @@ npm run preview:serve            # → http://127.0.0.1:55172
 
 - **画布全透**：`html` / `body` 都不铺底，壁纸由宿主画在自己的 body 上（带 `--wall-veil` 遮罩）。
   页面自己再铺一层 `--bg` 会整页发暗、跟宿主对不上。
-- **数字照抄，不设下限**：`page/glass.js` 把宿主下发的 `--magpie-glass-<region>-*` 与
-  `magpie.glass()/onGlass()` 收敛成 `--purge-glass-*`；三张卡片、状态条、浮层用 `--card` × 区域原值。
-  越界、缺字段、字符串数字都在这里夹回安全值，绝不让 `NaN` 进 CSS。
-- **胶囊与控件用 `--fg` 的 10%**：列表行、组装行、详情里的「何时用 / 事实块」、按钮、输入框、
-  chip、pick、查看都是 `color-mix(--fg calc(control-fill * 0.1), transparent)`，只有一圈描边与内侧高光
-  ——这样它们才像玻璃，而不是实心块。选中态用半透强调色（24%）。
+- **材质直出宿主那套**（对照 `fish-glass.css`）：底色 = `--card` × 区域不透明度；
+  `backdrop-filter: blur(区域 blur) saturate(180%) brightness(1.06)` 做折射观感；内侧白色高光 +
+  一层柔和投影；`::before` 左上冷光 / 右下壳光；`::after` 用 mask 挖出 1px 渐变高光边。
+  **没有自定义描边、没有黑色边框。**
+- **行与块本身就是玻璃面**：状态条、列表行、组装行、详情里的「何时用 / 事实块」用同一套面材质
+  （行 12px 圆角、块 14px）；不再给左右两列套大壳，壁纸从行与行之间透出来。
+- **控件用 `--fg` 的 10%**：按钮、输入框、chip、pick、查看、胶囊组都是 `--fg` × 控件数字的 10%，
+  带同一份模糊与描边高光；主操作仍用强调色。
+- **数字照抄、不设下限**：`page/glass.js` 把 `--magpie-glass-<region>-*` 与 `magpie.glass()/onGlass()`
+  收敛成 `--purge-glass-*`（fill 与 blur 都带）；`control` 缺席时跟 `content` 走；脏值夹回安全范围。
 - **分组标题**：透明、不吸顶，跟着列表滚走（吸顶就必须给它一层遮挡，实测透明底兜不住滚过去的行）。
-- **材质由 `--fg` 派生**：分隔线 `--fg 12%`（深色主题下宿主的 `--line` 压在壁纸上就是「黑边」）、
-  高光边 `--fg 26%/14%`、内侧高光 `--fg 20%`、柔光 `--fg 10%` + 强调色 8%；深浅主题自动成立。
-- **颜色全部接官方 token**：正文 `--magpie-fg`、次要 `--magpie-muted`、卡面 `--magpie-card`、
-  字体 `--magpie-font`/`--magpie-code`；强调色 `--magpie-accent`、强调色上的文字 `--magpie-accent-fg`、
-  三态 `--magpie-green`/`--magpie-red`/`--magpie-amber`（人设＝accent、技能＝amber、素材＝muted）。
-- **控件的兜底**：宿主 `pagebridge` 目前只下发 `sidebar / content / overlay` 三个区域，`control` 缺席时
-  控件沿用「主界面」的数字。
-- **模糊**：壁纸在宿主文档上，插件页在沙箱帧里，画布只能透、不能模糊（跨文档模糊浏览器不给）；
-  真吃到模糊的是详情浮层与模式下拉——它们背后是本页内容。
+- **文字全部接官方 token**：`--magpie-fg` / `--magpie-muted` / `--magpie-accent` / `--magpie-accent-fg` /
+  `--magpie-green` / `--magpie-red` / `--magpie-amber` / `--magpie-font` / `--magpie-code`；
+  输入框占位符显式用 `--magpie-muted`，不再吃浏览器默认的「当前文字色 54%」。
+- **模糊边界**：壁纸在宿主文档上，插件页在沙箱帧里，画布本身只能透、不能糊；能吃到模糊的是
+  卡片/行的页内背景，以及详情浮层与模式下拉。
 - 降级：`@supports not (backdrop-filter)`、`prefers-reduced-transparency: reduce`、
   `forced-colors: active` 一律回实底并撤掉柔光/高光边。
 
@@ -464,6 +464,7 @@ node tools/scan.mjs --json
 
 | 版本 | 要点 |
 | --- | --- |
+| `0.8.3` | 玻璃改成宿主材质直出：`--card` 底色 + backdrop 模糊/饱和/提亮 + 内侧高光 + 1px 渐变高光边 + 柔光；去掉左右两列大壳与所有自定义边框（不再有黑边），行/块本身就是玻璃面；控件仍是 `--fg` 10% 胶囊；占位符接 `--magpie-muted` |
 | `0.8.2` | 玻璃观感对齐官方插件页：画布全透、卡片用 content 原值（去掉 55/70/45 的下限）、胶囊与控件改用 `--fg` 的 10%×控件数字、材质与分隔线由 `--fg` 派生；另修掉注释里写了 `page/*/style.css` 导致 `*/` 提前闭合、整段玻璃变量规则被解析器吞掉的问题 |
 | `0.8.1` | 颜色全部接官方主题 token：强调色 `--magpie-accent`、强调色上的文字 `--magpie-accent-fg`、三态 `--magpie-green/red`、技能色 `--magpie-amber`，页面不再写死莓红；宿主只下发三个玻璃区（无 `control`）时控件跟「主界面」数字走，不再恒为实底 |
 | `0.8.0` | 玻璃卡片化：左列（搜索 + 列表）、右列（组装清单）、底部导入条在玻璃开着时各成一张玻璃卡（圆角 14、内边距 12/14、列间距 16）；卡内的列表行与组装行各成一颗玻璃胶囊（12px 圆角），详情里的「何时用 / 事实块」也是胶囊，分组标题保持透明且不吸顶；玻璃关着仍是扁平工作台 |

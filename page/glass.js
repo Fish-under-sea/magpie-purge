@@ -83,9 +83,11 @@
       '--purge-glass-canvas-fill': `${content.fill}%`,
       '--purge-glass-canvas-blur': `${content.blur}px`,
       '--purge-glass-ground-fill': `${content.fill}%`,
+      '--purge-glass-ground-blur': `${content.blur}px`,
       '--purge-glass-overlay-fill': `${overlay.fill}%`,
       '--purge-glass-overlay-blur': `${overlay.blur}px`,
       '--purge-glass-control-fill': `${control.fill}%`,
+      '--purge-glass-control-blur': `${control.blur}px`,
     }
   }
 
