@@ -19,6 +19,7 @@ const html = read('page', 'index.html')
 const css = read('page', 'style.css')
 const app = read('page', 'app.js')
 const plan = read('page', 'plan.js')
+const glass = read('page', 'glass.js')
 const hostread = read('page', 'hostread.js')
 const bridge = read('preview', 'bridge.js')
 // 品牌标记内联成 data URI：单文件不能有外部依赖，file:// 下取子文件会被拦。
@@ -46,7 +47,7 @@ const catalogBlock = `
 })()
 `
 
-// 顶部控制条：单文件里没有 magpie 外壳，给两个开关，免得全靠手改 URL。
+// 顶部控制条：单文件里没有 magpie 外壳，给几个开关，免得全靠手改 URL。
 const chrome = `
 <div class="pv-bar" role="region" aria-label="预览控制">
   <b>破甲 · Purge</b>
@@ -55,6 +56,14 @@ const chrome = `
     <select id="pv-theme">
       <option value="dark">深色</option>
       <option value="light">浅色</option>
+    </select>
+  </label>
+  <label>玻璃
+    <select id="pv-glass">
+      <option value="off">关闭</option>
+      <option value="lite">轻透</option>
+      <option value="balanced">均衡</option>
+      <option value="clear">全透</option>
     </select>
   </label>
   <label>状态
@@ -68,17 +77,21 @@ const chrome = `
 ;(() => {
   const q = new URLSearchParams(location.hash.slice(1) || location.search.slice(1))
   const theme = document.getElementById('pv-theme')
+  const glass = document.getElementById('pv-glass')
   const snap = document.getElementById('pv-snap')
   theme.value = q.get('theme') === 'light' ? 'light' : 'dark'
+  glass.value = ['off', 'lite', 'balanced', 'clear'].includes(q.get('glass')) ? q.get('glass') : 'off'
   snap.value = q.get('snap') === 'blocked' ? 'blocked' : 'ready'
   const go = () => {
     const next = new URLSearchParams()
     next.set('theme', theme.value)
+    next.set('glass', glass.value)
     next.set('snap', snap.value)
     location.hash = next.toString()
     location.reload()
   }
   theme.onchange = go
+  glass.onchange = go
   snap.onchange = go
 
   // #row=N 直接打开某条的详情，省得每次都手点
@@ -100,6 +113,11 @@ const out = html
 .pv-hint{color:var(--muted);margin-right:auto}
 .pv-bar label{display:flex;align-items:center;gap:6px;color:var(--muted)}
 .pv-bar select{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:2px 6px}
+/* 单文件预览没有宿主帧：壁纸垫在画布下面，画布的不透明度才看得出效果。
+   真机里壁纸画在 magpie 的 body 上（带 --wall-veil 遮罩），这里用两块柔光渐变代它；
+   画布这一层照抄页面自己的写法，玻璃关闭（100%）时它盖住壁纸，与旧版一致。 */
+html{background:linear-gradient(color-mix(in srgb,var(--bg) var(--purge-glass-canvas-fill,100%),transparent),color-mix(in srgb,var(--bg) var(--purge-glass-canvas-fill,100%),transparent)),linear-gradient(color-mix(in srgb,#0f1115 45%,transparent),color-mix(in srgb,#0f1115 45%,transparent)),radial-gradient(900px 700px at 14% 0%,#3d5fa8 0%,transparent 60%),radial-gradient(800px 620px at 96% 100%,#8c3a5f 0%,transparent 56%),radial-gradient(680px 520px at 82% 6%,#1f7a6a 0%,transparent 52%),linear-gradient(160deg,#0b0d14,#1b2233)}
+html[data-theme="light"]{background:linear-gradient(color-mix(in srgb,var(--bg) var(--purge-glass-canvas-fill,100%),transparent),color-mix(in srgb,var(--bg) var(--purge-glass-canvas-fill,100%),transparent)),linear-gradient(color-mix(in srgb,#f4f4f2 45%,transparent),color-mix(in srgb,#f4f4f2 45%,transparent)),radial-gradient(900px 700px at 12% 0%,#b9d4ff 0%,transparent 60%),radial-gradient(800px 620px at 96% 100%,#ffc2d4 0%,transparent 56%),radial-gradient(680px 520px at 82% 6%,#ffe4b8 0%,transparent 52%),linear-gradient(160deg,#fdfdff,#eef2fb)}
 </style>`)
   .replace('<script src="_magpie/bridge.js"></script>', `<script>\n${bridge.replace(
     'new URLSearchParams(location.search)',
@@ -110,8 +128,9 @@ const out = html
   // app.js 原本是 defer：内联到 <head> 里会赶在 DOM 之前跑，什么都取不到。
   // 所以从这个位置摘掉，放到 </body> 前。
   .replace(/<script src="app\.js[^"]*" defer><\/script>/, '')
-  // plan.js 是纯计算、不碰 DOM，留在原位内联即可（app.js 依赖它）。
+  // plan.js / glass.js 是纯计算/只碰文档根，留在原位内联即可（app.js 依赖它们）。
   .replace(/<script src="plan\.js[^"]*"><\/script>/, `<script>\n${plan}\n</script>`)
+  .replace(/<script src="glass\.js[^"]*" defer><\/script>/, `<script>\n${glass}\n</script>`)
   // hostread.js 同理：app.js 一启动就要用它取正文。
   .replace(/<script src="hostread\.js[^"]*" defer><\/script>/, `<script>\n${hostread}\n</script>`)
   .replace('</body>', `<script>\n${app}\n</script>\n</body>`)

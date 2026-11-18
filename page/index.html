@@ -10,6 +10,9 @@
      没有它，更新插件后浏览器可能一直用缓存的旧 app.js / style.css。 -->
 <script src="plan.js?v=0"></script>
 <link rel="stylesheet" href="style.css?v=0">
+<!-- 玻璃：把宿主的四区域数字收敛成 --purge-glass-*（见 page/glass.js 的注释）。
+     排在 app.js 前面：首屏画出来之前就该有底色，不该先闪一下实底。 -->
+<script src="glass.js?v=0" defer></script>
 <!-- 读正文的通道要排在 app.js 前面：app.js 启动就会用它取 catalog.json。 -->
 <script src="hostread.js?v=0" defer></script>
 <script src="app.js?v=0" defer></script>

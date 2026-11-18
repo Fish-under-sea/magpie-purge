@@ -11,9 +11,34 @@
   html[data-theme="light"] .chrome b { color: #16181d; }
   html[data-theme="light"] .chrome span { color: #6b7280; }
   html[data-theme="light"] .chrome .right { color: #8a8f9a; }
-  html[data-theme="light"] iframe { background: #fbfbf9; }
+  html[data-theme="light"] .chrome select { background: #fbfbf9; color: #1c1d21; border-color: #d8d8dc; }
   body { display: grid; grid-template-rows: 38px 1fr; font: 12.5px/1.4 -apple-system, "Segoe UI", "Noto Sans SC", system-ui, sans-serif; }
+  /* 预览用的「壁纸」：真机是 magpie 画在自己 body 上的背景图 + --wall-veil 遮罩。
+     这里用几块色光代它——故意配得比页面底色更花，否则「透出来多少」根本看不出来。 */
+  body {
+    background:
+      radial-gradient(900px 700px at 14% 0%, #3d5fa8 0%, transparent 60%),
+      radial-gradient(800px 620px at 96% 100%, #8c3a5f 0%, transparent 56%),
+      radial-gradient(680px 520px at 82% 6%, #1f7a6a 0%, transparent 52%),
+      linear-gradient(160deg, #0b0d14, #1b2233);
+  }
+  html[data-theme="light"] body {
+    background:
+      radial-gradient(900px 700px at 12% 0%, #b9d4ff 0%, transparent 60%),
+      radial-gradient(800px 620px at 96% 100%, #ffc2d4 0%, transparent 56%),
+      radial-gradient(680px 520px at 82% 6%, #ffe4b8 0%, transparent 52%),
+      linear-gradient(160deg, #fdfdff, #eef2fb);
+  }
+  /* 遮罩：真机玻璃开着时 magpie 会把遮罩调薄（内容区透得越多、遮罩越厚，45–84%）。
+     这里取 45%（玻璃开着那一档），压住壁纸保证文字有底，又不至于把壁纸全盖掉。
+     压在壁纸与插件页之间（z-index 0），不能盖住上面的壳和帧。 */
+  body::before {
+    content: ""; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background: color-mix(in srgb, #0f1115 45%, transparent);
+  }
+  html[data-theme="light"] body::before { background: color-mix(in srgb, #f4f4f2 45%, transparent); }
   .chrome {
+    position: relative; z-index: 1;
     display: flex; align-items: center; gap: 10px; padding: 0 14px;
     background: #101318; color: #cfd3dc; border-bottom: 1px solid #24272f;
   }
@@ -21,28 +46,59 @@
   .chrome span { color: #7f8696; }
   .chrome .dot { width: 8px; height: 8px; border-radius: 50%; background: #7c8cff; }
   .chrome .right { margin-left: auto; color: #6d7484; }
-  iframe { width: 100%; height: 100%; border: 0; background: #15171c; display: block; }
+  .chrome label { display: flex; align-items: center; gap: 6px; color: inherit; white-space: nowrap; }
+  .chrome select { font: inherit; color: #cfd3dc; background: #171b22; border: 1px solid #2a2f3a; border-radius: 6px; padding: 2px 6px; }
+  /* 窄屏（预览里拖到手机宽度）把右侧说明藏掉：壳自己的控件不该把「玻璃」两个字挤成两行。 */
+  @media (max-width: 620px) { .chrome .right { display: none; } }
+  /* 帧必须透明：页面画布要能透出下面的壁纸。 */
+  iframe { position: relative; z-index: 1; width: 100%; height: 100%; border: 0; background: transparent; display: block; }
   /* 预览壳自己不许撑宽：它一横向溢出，iframe 会跟着变宽，页面右边就被裁掉了。 */
   .chrome { min-width: 0; overflow: hidden; }
   .chrome .right { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 </style>
 <div class="chrome">
   <i class="dot"></i><b>magpie</b><span>· 扩展 → 插件 → 破甲 · Purge</span>
+  <label>玻璃
+    <select id="glass">
+      <option value="off">关闭</option>
+      <option value="lite">轻透</option>
+      <option value="balanced">均衡</option>
+      <option value="clear">全透</option>
+    </select>
+  </label>
   <span class="right" id="mode">预览：mock 宿主，不跑网关</span>
 </div>
 <iframe id="frame" src="/page/index.html" title="Purge in Magpie 插件页"></iframe>
 <script>
-  const theme = new URLSearchParams(location.search).get('theme') || 'dark'
+  const params = new URLSearchParams(location.search)
+  const theme = params.get('theme') || 'dark'
+  const glass = ['off', 'lite', 'balanced', 'clear'].includes(params.get('glass')) ? params.get('glass') : 'off'
   document.documentElement.dataset.theme = theme
   const frame = document.getElementById('frame')
+  const picker = document.getElementById('glass')
+  picker.value = glass
+  const label = () => {
+    document.getElementById('mode').textContent = `预览：mock 宿主 · ${theme === 'light' ? '浅色' : '深色'} · 玻璃 ${picker.selectedOptions[0].text}`
+  }
   // 把预览用的开关一起转给业务页：unsent=1 抹掉「最近一次生效」，
   // 好看「确认注入」还没按下的那副样子。
-  const pass = new URLSearchParams({ theme })
+  const pass = new URLSearchParams({ theme, glass })
   for (const flag of ['unsent', 'menu', 'inline']) {
-    if (new URLSearchParams(location.search).get(flag) === '1') pass.set(flag, '1')
+    if (params.get(flag) === '1') pass.set(flag, '1')
   }
   frame.src = `/page/index.html?${pass}`
-  document.getElementById('mode').textContent = `预览：mock 宿主 · ${theme === 'light' ? '浅色' : '深色'}`
+  label()
+
+  // 换玻璃档：只换查询串重载帧，不刷新整个壳（壳的主题与滚动位置都留着）。
+  picker.onchange = () => {
+    const next = new URLSearchParams(location.search)
+    next.set('glass', picker.value)
+    history.replaceState(null, '', `?${next}`)
+    const q = new URLSearchParams({ theme, glass: picker.value })
+    for (const flag of ['unsent', 'menu', 'inline']) if (params.get(flag) === '1') q.set(flag, '1')
+    frame.src = `/page/index.html?${q}`
+    label()
+  }
 
   // 真机里，插件页的 CSP 是 connect-src 'none'，页面自己 fetch 不到正文；
   // 它只能请宿主窗口用窗口的身份去读页内文件（pagebridge 的 asset 调用）。
@@ -65,7 +121,7 @@
   })
   // 默认不选任何条目：右栏默认就是「注入组装」，那是最该看的一屏。
   // ?row=0 起指定第几条，用来看检查器（真机里由人点）。
-  const rowParam = new URLSearchParams(location.search).get('row')
+  const rowParam = params.get('row')
   frame.addEventListener('load', () => {
     if (rowParam === null) return
     setTimeout(() => {
@@ -78,7 +134,7 @@
 
   // 热重载（serve.mjs --watch）：改了 page/ 里的文件，重设 frame.src 拉一份新的，
   // 不用手点刷新。用 src 重设而不是 contentWindow.location.reload()，跨帧更稳。
-  if (new URLSearchParams(location.search).get('watch') !== '0') {
+  if (params.get('watch') !== '0') {
     try {
       const es = new EventSource('/_reload')
       es.onmessage = () => {
@@ -86,9 +142,7 @@
         u.searchParams.set('t', Date.now())
         frame.src = u.toString()
         document.getElementById('mode').textContent = '预览：已重载'
-        setTimeout(() => {
-          document.getElementById('mode').textContent = `预览：mock 宿主 · ${theme === 'light' ? '浅色' : '深色'}`
-        }, 900)
+        setTimeout(label, 900)
       }
     } catch { /* 没开 watching 就静默 */ }
   }

@@ -6,8 +6,8 @@
 <title>破甲 · Purge（单文件预览）</title>
 <script>
 // mock 的 magpie 页面桥（真品是 magpie 的 internal/gui/pagebridge.js）。
-// 只实现插件页用到的那几样：ready / theme / options.get/set / onVisibility。
-// 主题走 URL 参数：?theme=dark|light，默认 dark。
+// 只实现插件页用到的那几样：ready / theme / glass / options.get/set / onVisibility。
+// 主题走 URL 参数：?theme=dark|light，默认 dark；玻璃走 ?glass=off|lite|balanced|clear。
 ;(() => {
   const q = new URLSearchParams(location.hash.slice(1) || location.search.slice(1))
   const dark = (q.get('theme') || 'dark') !== 'light'
@@ -23,10 +23,39 @@
         font: '-apple-system, "Segoe UI", "Noto Sans SC", system-ui, sans-serif',
       }
 
+  /**
+   * GLASS 是预览用的四套数字，形状与真机一致：每个区域 [fill 百分比, blur px]。
+   *
+   * 真机上这些值来自「设置 › 外观」的滑块，页面只管读；预览里必须能手动摆到几档，
+   * 否则玻璃相关的回归（文字透没透、高光边还在不在）只能靠装进 magpie 手点。
+   * 数字照 2.4.4 的常见配置取：侧栏 82/12、浮层 86/10、控件 92/8。
+   */
+  const GLASS = {
+    off: { sidebar: [82, 12], content: [100, 0], overlay: [100, 0], control: [100, 0] },
+    lite: { sidebar: [82, 12], content: [82, 12], overlay: [86, 10], control: [92, 8] },
+    balanced: { sidebar: [82, 12], content: [62, 26], overlay: [86, 10], control: [92, 8] },
+    clear: { sidebar: [82, 12], content: [20, 30], overlay: [55, 16], control: [40, 8] },
+  }
+  const glassName = Object.hasOwn(GLASS, q.get('glass')) ? q.get('glass') : 'off'
+  const regions = Object.fromEntries(
+    Object.entries(GLASS[glassName]).map(([name, [fill, blur]]) => [name, { fill, blur }]),
+  )
+  const glass = { on: glassName !== 'off', regions }
+
   const root = document.documentElement
   root.dataset.theme = dark ? 'dark' : 'light'
   root.style.colorScheme = dark ? 'dark' : 'light'
   for (const [k, v] of Object.entries(tokens)) root.style.setProperty('--magpie-' + k, v)
+
+  // 与真机 pagebridge.js 的 paint() 同形：属性表示「有没有区域真透」，变量给四个区域各一对数字。
+  const paintGlass = () => {
+    root.toggleAttribute('data-magpie-glass', glass.on)
+    for (const [name, part] of Object.entries(regions)) {
+      root.style.setProperty(`--magpie-glass-${name}-fill`, `${part.fill}%`)
+      root.style.setProperty(`--magpie-glass-${name}-blur`, `${part.blur}px`)
+    }
+  }
+  paintGlass()
 
   // 预览里 options 只活在内存：刷新页面就回到默认值。
   // 第一次 get 时用演示快照的 options 打底——bridge 先于 catalog.js 加载，所以只能惰性取。
@@ -42,13 +71,22 @@
   }
   let seeded = false
 
+  /** glassy 是真机 onGlass 的订阅表：先记下回调，随后立刻补一次当前值。 */
+  const glassy = []
   const api = {
-    theme: { dark, lang: 'zh-CN', tokens },
+    theme: { dark, lang: 'zh-CN', tokens, glass },
+    glass,
+    // 预览调试用：告诉页面/截图脚本现在是哪一档
+    glassName,
     context: {},
     service: '',
     visible: true,
-    ready: Promise.resolve({ dark, lang: 'zh-CN', tokens }),
+    ready: Promise.resolve({ dark, lang: 'zh-CN', tokens, glass }),
     onTheme() {},
+    onGlass(fn) {
+      glassy.push(fn)
+      try { fn(glass) } catch { /* 页面自己的回调出错不该弄挂预览壳 */ }
+    },
     onVisibility(fn) {
       api._vis = fn
     },
@@ -72,6 +110,7 @@
   }
   window.magpie = api
 })()
+
 </script>
 <script>
 // 演示快照（预览用）：只保留元数据，正文不入库也不落盘。
@@ -858,7 +897,7 @@ window.__PURGE_BLOCKED__ = {
 })()
 </script>
 <script>window.__PURGE_SINGLE_FILE__ = true</script>
-<!-- ?v=0 是占位：tools/prepack.mjs 打包时换成真实版本号，postpack 换回来。
+<!-- ?v=0.7.0 是占位：tools/prepack.mjs 打包时换成真实版本号，postpack 换回来。
      没有它，更新插件后浏览器可能一直用缓存的旧 app.js / style.css。 -->
 <script>
 // 页面侧的「这次到底注不注入」判定。
@@ -1889,10 +1928,13 @@ textarea.text-edit:focus-visible {
 .modal[hidden] { display: none; }
 .modal-sheet {
   position: relative;
+  display: flex;
+  flex-direction: column;
   width: min(880px, 100%);
   max-height: 100%;
-  overflow-y: auto;
-  padding: 22px 24px 24px;
+  /* 外框不滚、里层滚：玻璃的高光边与柔光必须贴在外框上。
+     外框自己滚的话（原来的 overflow-y:auto），那两样会跟着内容一起滚走。 */
+  overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 14px;
   background: var(--bg);
@@ -1903,6 +1945,13 @@ textarea.text-edit:focus-visible {
     0 6px 16px -6px rgba(0, 0, 0, .35),
     0 18px 36px -18px rgba(0, 0, 0, .45);
   overscroll-behavior: contain;
+}
+.modal-sheet > #inspect {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 22px 24px 24px;
 }
 .modal-x {
   position: absolute;
@@ -1925,7 +1974,7 @@ textarea.text-edit:focus-visible {
 .modal-x:hover { color: var(--ink); border-color: var(--line); }
 @media (max-width: 620px) {
   .modal { padding: 12px; }
-  .modal-sheet { padding: 18px 16px 20px; }
+  .modal-sheet > #inspect { padding: 18px 16px 20px; }
 }
 
 /* ---------- 底部：导入常态显示 ---------- */
@@ -2013,13 +2062,370 @@ textarea.text-edit:focus-visible {
   .seg-value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .seg-menu { left: 8px; right: 8px; min-width: 0; }
 }
+/* ---------- 液态玻璃：跟随 magpie 的四个区域数字 ---------- */
+/* 页面不自己实现模糊、也不自己挑颜色：数字来自宿主的「设置 › 外观」，
+   经 page/glass.js 收敛成 --purge-glass-*（画布照抄用户数字，文字面 / 浮层 / 控件各有下限）。
+   玻璃关闭（100% / 0px）时这一节等于没生效——与没有玻璃的旧版逐像素一致。
+
+   画布就是「一整个主界面」：透出来的是宿主画在自己 body 上的壁纸（带 --wall-veil 遮罩），
+   所以页面不画壁纸、不在画布上再叠一层底，否则就成了「外透内实」。
+   映射关系（宿主区域 → 本页的面）：
+     主界面 content → 页面画布、状态条、组装列表的分组标题（吸顶那层）
+     浮层 overlay  → 详情浮层、模式下拉
+     控件 control  → 按钮、输入框、胶囊组、chip、pick、查看
+     侧栏 sidebar  → 本页没有独立导航面，不用（页面唯一那行是品牌，不是导航）。 */
+
+:root {
+  /* 材质 token 与宿主 fish-glass.css 同一套做法（只抄手法，不引依赖）：
+     深色亮边、浅色更柔；以下是深色那套，浅色在末尾覆盖。 */
+  --purge-rim-line: rgba(255, 255, 255, .72);
+  --purge-rim-line-2: rgba(255, 255, 255, .12);
+  --purge-rim-shade: rgba(0, 0, 0, .26);
+  --purge-sheen-a: rgba(255, 255, 255, .20);
+  --purge-sheen-b: rgba(160, 205, 255, .12);
+}
+html[data-theme="light"] {
+  --purge-rim-line: rgba(255, 255, 255, .9);
+  --purge-rim-line-2: rgba(0, 0, 0, .06);
+  --purge-rim-shade: rgba(0, 0, 0, .10);
+  --purge-sheen-a: rgba(255, 255, 255, .55);
+  --purge-sheen-b: rgba(140, 190, 255, .18);
+}
+
+/* 画布：不透明度照抄「主界面」。color-mix 不受支持时这条声明作废，
+   上面 html{background:var(--bg)} 还在，页面退回实底而不是变成透明。
+
+   这里只跟 fill、不跟 blur：壁纸画在宿主文档的 body 上，而本页在一个沙箱帧里，
+   backdrop-filter 只能采样本帧自己的内容（跨文档模糊浏览器不给）。
+   能真吃到模糊的是「浮层 / 下拉 / 吸顶分组标题」——它们背后是本页内容，见下面几处。 */
+html {
+  background: color-mix(in srgb, var(--bg) var(--purge-glass-canvas-fill, 100%), transparent);
+}
+
+/* 状态条：整页文字最密的一块，跟主界面同层但保底 55%（见 glass.js 的 FLOOR）。
+   只改底色，左边那条状态色条与布局都不动。 */
+html[data-magpie-glass] .plan {
+  background-color: color-mix(in srgb, var(--card) var(--purge-glass-ground-fill, 100%), transparent);
+  border-top-color: color-mix(in srgb, var(--line) 60%, transparent);
+  border-right-color: color-mix(in srgb, var(--line) 60%, transparent);
+  border-bottom-color: color-mix(in srgb, var(--line) 60%, transparent);
+}
+
+/* 组装列表的每一行不再自带实底：父级画布已经在当玻璃，子块再盖一层实底就永远透不下来
+   （宿主 2.4.4 修「看着缺玻璃」就是这一条）。左侧的类型色条与行分隔线保留。 */
+html[data-magpie-glass] .stack-row { background-color: transparent; }
+html[data-magpie-glass] .row:hover { background-color: color-mix(in oklab, var(--ink) 7%, transparent); }
+html[data-magpie-glass] .seg-opt:hover { background-color: color-mix(in oklab, var(--ink) 6%, transparent); }
+
+/* 浮层：详情浮层与模式下拉跟「浮层」区域。透明到 70% 以下会把正文扔到壁纸上，
+   所以下限由 glass.js 给；这里的模糊是真能生效的一处——浮层背后就是本页自己的内容。 */
+html[data-magpie-glass] .modal-sheet {
+  background: color-mix(in srgb, var(--bg) var(--purge-glass-overlay-fill, 100%), transparent);
+  -webkit-backdrop-filter: blur(var(--purge-glass-overlay-blur, 0px)) saturate(190%) brightness(1.08);
+  backdrop-filter: blur(var(--purge-glass-overlay-blur, 0px)) saturate(190%) brightness(1.08);
+}
+html[data-magpie-glass] .seg-menu {
+  background: color-mix(in srgb, var(--card) var(--purge-glass-overlay-fill, 100%), transparent);
+  -webkit-backdrop-filter: blur(var(--purge-glass-overlay-blur, 0px)) saturate(190%) brightness(1.08);
+  backdrop-filter: blur(var(--purge-glass-overlay-blur, 0px)) saturate(190%) brightness(1.08);
+}
+
+/* 控件永远留自己的底（钩子文档第 3 条）：主操作 .primary 与胶囊内段 .seg 不在这里，
+   前者要保住强调色，后者由外层胶囊统一上色。 */
+html[data-magpie-glass] .plan-controls,
+html[data-magpie-glass] :is(
+  button:not(.primary):not(.seg),
+  select,
+  input:not([type="checkbox"]):not([type="range"]),
+  textarea:not(.text-edit),
+  .chip,
+  .pick,
+  .row-view,
+  .modal-x
+) {
+  background-color: color-mix(in srgb, var(--card) var(--purge-glass-control-fill, 100%), transparent);
+}
+
+/* 柔光与高光边：只在「模糊 + color-mix 都支持」时出现。
+   mask 不支持时那条渐变会糊满整个面，所以整组一起放进 @supports。 */
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) and (background: color-mix(in srgb, red, transparent)) {
+  /* 成块的文字面：高光边压在边框内侧，不占空间也不拦点击 */
+  html[data-magpie-glass] .plan,
+  html[data-magpie-glass] .modal-sheet,
+  html[data-magpie-glass] .seg-menu {
+    box-shadow: inset 0 1px 0 var(--purge-rim-line), inset 0 -1px 0 var(--purge-rim-shade);
+  }
+  /* 浮层与状态条的边框交给渐变高光边画，避免两条线叠在一起 */
+  html[data-magpie-glass] .modal-sheet { border-color: transparent; }
+  html[data-magpie-glass] .seg-menu { border-color: transparent; }
+
+  /* 吸顶的分组标题：它压在滚动的行上面，必须自带一层底，否则滚过去的字会透出来。
+     这层底与画布同一个数字，再加同一份模糊——是本页唯一「真模糊」的滚动面。 */
+  html[data-magpie-glass] .group > .group-head {
+    background: color-mix(in srgb, var(--bg) var(--purge-glass-canvas-fill, 100%), transparent);
+    -webkit-backdrop-filter: blur(var(--purge-glass-canvas-blur, 0px)) saturate(180%) brightness(1.06);
+    backdrop-filter: blur(var(--purge-glass-canvas-blur, 0px)) saturate(180%) brightness(1.06);
+  }
+
+  /* 柔光：左上冷光 + 右下壳光。只给大面，小控件上会显脏。 */
+  html[data-magpie-glass] .plan::before,
+  html[data-magpie-glass] .modal-sheet::before,
+  html[data-magpie-glass] .seg-menu::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    background:
+      radial-gradient(130% 85% at 18% -10%, var(--purge-sheen-a), transparent 62%),
+      radial-gradient(90% 70% at 105% 110%, var(--purge-sheen-b), transparent 68%);
+  }
+  /* 高光边：1px 渐变描边，mask 挖掉中间只留边（fill=0 时这就是「还在的那层玻璃」）。 */
+  html[data-magpie-glass] .plan::after,
+  html[data-magpie-glass] .modal-sheet::after,
+  html[data-magpie-glass] .seg-menu::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    pointer-events: none;
+    background: linear-gradient(145deg, var(--purge-rim-line), transparent 38%, transparent 62%, var(--purge-rim-line-2));
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    mask-composite: exclude;
+    opacity: .7;
+  }
+  /* 控件只留一圈内侧高光：小方块上再来柔光会显脏，也不该盖掉强调色。 */
+  html[data-magpie-glass] .plan-controls,
+  html[data-magpie-glass] :is(button:not(.primary):not(.seg), select, input:not([type="checkbox"]):not([type="range"]), textarea:not(.text-edit), .chip, .pick, .row-view, .modal-x) {
+    box-shadow: inset 0 1px 0 var(--purge-rim-line), inset 0 -1px 0 var(--purge-rim-shade);
+  }
+}
+
+/* 壁纸真的透进来（内容区 < 60%，glass.js 判 deep）：页面自己的线与阴影撑不住。
+   分隔线加深一档、选中态加一档，投影收掉——影子落在壁纸上只是一团脏。 */
+html[data-glass="deep"] {
+  --line: color-mix(in oklab, var(--magpie-line, #e3e3e6) 55%, var(--ink));
+  --selected: color-mix(in oklab, var(--ink) 14%, transparent);
+}
+html[data-glass="deep"] .plan { box-shadow: none; }
+html[data-glass="deep"] .modal-sheet {
+  box-shadow: inset 0 1px 0 var(--purge-rim-line), 0 10px 30px rgba(0, 0, 0, .2);
+}
+
+/* 降级一：环境不支持背景模糊 → 全部回实底，柔光与高光边（靠 mask）一起撤掉。
+   注意 @supports 在禁 GPU 的远程桌面里仍报「支持」，所以这条只是第一层保险，
+   真正兜住文字的是上面的下限：下限让底色永远不会低到读不清。 */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  html[data-magpie-glass] { background: var(--bg); -webkit-backdrop-filter: none; backdrop-filter: none; }
+  html[data-magpie-glass] .plan,
+  html[data-magpie-glass] .modal-sheet,
+  html[data-magpie-glass] .seg-menu,
+  html[data-magpie-glass] .group > .group-head {
+    background: var(--card);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  html[data-magpie-glass] .stack-row { background-color: var(--card); }
+}
+
+/* 降级二：用户要求减弱透明 / 高对比度 → 回实底并关掉模糊，不为玻璃牺牲可读性。 */
+@media (prefers-reduced-transparency: reduce), (forced-colors: active) {
+  html[data-magpie-glass] { background: var(--bg); -webkit-backdrop-filter: none; backdrop-filter: none; }
+  html[data-magpie-glass] .plan,
+  html[data-magpie-glass] .modal-sheet,
+  html[data-magpie-glass] .seg-menu,
+  html[data-magpie-glass] .group > .group-head,
+  html[data-magpie-glass] .stack-row {
+    background: var(--card);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  html[data-magpie-glass] .modal-sheet { border-color: var(--line); }
+  html[data-magpie-glass] .seg-menu { border-color: var(--line); }
+  html[data-magpie-glass] .plan::before,
+  html[data-magpie-glass] .plan::after,
+  html[data-magpie-glass] .modal-sheet::before,
+  html[data-magpie-glass] .modal-sheet::after,
+  html[data-magpie-glass] .seg-menu::before,
+  html[data-magpie-glass] .seg-menu::after { content: none; }
+}
+
 /* ---- 预览控制条 ---- */
 .pv-bar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:8px 16px;border-bottom:1px solid var(--line);background:var(--card);font:12px/1.4 var(--magpie-font,system-ui);color:var(--ink)}
 .pv-bar b{font-size:13px;font-weight:600}
 .pv-hint{color:var(--muted);margin-right:auto}
 .pv-bar label{display:flex;align-items:center;gap:6px;color:var(--muted)}
 .pv-bar select{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:2px 6px}
+/* 单文件预览没有宿主帧：壁纸垫在画布下面，画布的不透明度才看得出效果。
+   真机里壁纸画在 magpie 的 body 上（带 --wall-veil 遮罩），这里用两块柔光渐变代它；
+   画布这一层照抄页面自己的写法，玻璃关闭（100%）时它盖住壁纸，与旧版一致。 */
+html{background:linear-gradient(color-mix(in srgb,var(--bg) var(--purge-glass-canvas-fill,100%),transparent),color-mix(in srgb,var(--bg) var(--purge-glass-canvas-fill,100%),transparent)),linear-gradient(color-mix(in srgb,#0f1115 45%,transparent),color-mix(in srgb,#0f1115 45%,transparent)),radial-gradient(900px 700px at 14% 0%,#3d5fa8 0%,transparent 60%),radial-gradient(800px 620px at 96% 100%,#8c3a5f 0%,transparent 56%),radial-gradient(680px 520px at 82% 6%,#1f7a6a 0%,transparent 52%),linear-gradient(160deg,#0b0d14,#1b2233)}
+html[data-theme="light"]{background:linear-gradient(color-mix(in srgb,var(--bg) var(--purge-glass-canvas-fill,100%),transparent),color-mix(in srgb,var(--bg) var(--purge-glass-canvas-fill,100%),transparent)),linear-gradient(color-mix(in srgb,#f4f4f2 45%,transparent),color-mix(in srgb,#f4f4f2 45%,transparent)),radial-gradient(900px 700px at 12% 0%,#b9d4ff 0%,transparent 60%),radial-gradient(800px 620px at 96% 100%,#ffc2d4 0%,transparent 56%),radial-gradient(680px 520px at 82% 6%,#ffe4b8 0%,transparent 52%),linear-gradient(160deg,#fdfdff,#eef2fb)}
 </style>
+<!-- 玻璃：把宿主的四区域数字收敛成 --purge-glass-*（见 page/glass.js 的注释）。
+     排在 app.js 前面：首屏画出来之前就该有底色，不该先闪一下实底。 -->
+<script>
+// 破甲 · Purge 的液态玻璃策略（文件很小，但决定整页的底）。
+//
+// 宿主（magpie 2.4.0 起）把「设置 › 外观」的液态玻璃拆成四个区域，每个区域一对数字：
+//   fill：0–100 的不透明度（100 = 实底），blur：0–40 的模糊半径（0 = 不糊）。
+// 页面拿到的三样东西见插件仓 docs/developers/liquid-glass-hooks.md：
+//   --magpie-glass-<region>-fill / -blur、html[data-magpie-glass]、magpie.glass()/onGlass()。
+//
+// 为什么页面不直接在 CSS 里读宿主变量、而要过这一层：
+//   1. 四个区域是宿主的语义（侧栏 / 主界面 / 浮层 / 控件），本页只有「画布、文字块、浮层、控件」。
+//      这里做一次映射，样式里只出现 --purge-glass-*，换映射不用翻整份 CSS。
+//   2. 文字块与控件要有**下限**：宿主的数字能拖到 0，但本页的文字是整块铺着的，
+//      0% 会把「列表 / 组装 / 导入条」上的字直接扔到壁纸上（违反钩子文档第 3 条硬约束）。
+//      画布照抄用户数字（他就是要看壁纸），成块的文字面留 55%，浮层 70%，控件 45%。
+//   3. 脏值收敛：少字段、字符串、越界都夹回安全范围，绝不让 NaN 进 CSS 变量
+//      （NaN 会让整条声明作废，页面就变成「玻璃一开全白」那种坏法）。
+//
+// 降级：没有 magpie（直接开页面）、老宿主没玻璃、订阅抛错——一律按「关闭」处理，
+// 四个底都是 100%，与没有玻璃的旧版逐像素一致。
+;(() => {
+  /** REGIONS 是宿主下发的四个区域名；sidebar 本页没有独立导航面，只留作完整性。 */
+  const REGIONS = ['sidebar', 'content', 'overlay', 'control']
+  /** 文字块、浮层、控件的下限（百分数）。低于它就不透到读不清；高于它就照宿主走。 */
+  const FLOOR = { ground: 55, overlay: 70, control: 45 }
+  /** DEEP_BELOW：主界面不透明度低于这个值，就认为「壁纸真的透进来了」，进 deep 态。 */
+  const DEEP_BELOW = 60
+
+  const solid = () => ({ fill: 100, blur: 0 })
+
+  /**
+   * num 把宿主给的一个数字夹到 [min, max]。
+   *
+   * 认数字与「像数字的字符串」（宿主换个版本可能下发 "62"）；其余（null、NaN、'α'）一律回落到
+   * fallback。走到 CSS 之前必须是有限数：`62NaN%` 会让整条 background 声明作废。
+   */
+  function num(value, fallback, min, max) {
+    if (value === null || value === undefined || value === '') return fallback
+    const n = Number(value)
+    if (!Number.isFinite(n)) return fallback
+    return Math.min(max, Math.max(min, n))
+  }
+
+  /**
+   * normalize 把宿主那份玻璃数据收成 { on, regions }。
+   *
+   * 不是对象（老宿主给 null、或页面被单独打开）就返回 null——调用方按「关闭」处理，
+   * 不补一套假数字，免得以后排查时分不清「宿主没说」和「宿主说全实底」。
+   */
+  function normalize(value) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+    const source = value.regions && typeof value.regions === 'object' ? value.regions : {}
+    const regions = {}
+    for (const name of REGIONS) {
+      const part = source[name] && typeof source[name] === 'object' ? source[name] : {}
+      regions[name] = {
+        fill: num(part.fill, 100, 0, 100),
+        blur: num(part.blur, 0, 0, 40),
+      }
+    }
+    return { on: value.on === true, regions }
+  }
+
+  /** levelOf 把玻璃强度收成三档：off（实底）/ lite（轻透）/ deep（壁纸真的透进来了）。 */
+  function levelOf(glass) {
+    if (!glass || !glass.on) return 'off'
+    const values = REGIONS.map((name) => glass.regions[name])
+    // on 开着但四个区域都是 100% / 0px：宿主自己的「关闭」坐标，别再让页面挂一层玻璃规则。
+    if (values.every((r) => r.fill === 100 && r.blur === 0)) return 'off'
+    return glass.regions.content.fill < DEEP_BELOW ? 'deep' : 'lite'
+  }
+
+  /**
+   * tokensOf 算出页面要写的 CSS 变量。
+   *
+   * 画布拿用户原值（透多少是他的选择）；文字块、浮层、控件各自抬到下限。
+   * 控件的 blur 不传：宿主自己也只给控件底色与高光边，小方块上糊一层会显脏。
+   */
+  function tokensOf(glass) {
+    const { content, overlay, control } = glass.regions
+    return {
+      '--purge-glass-canvas-fill': `${content.fill}%`,
+      '--purge-glass-canvas-blur': `${content.blur}px`,
+      '--purge-glass-ground-fill': `${Math.max(content.fill, FLOOR.ground)}%`,
+      '--purge-glass-overlay-fill': `${Math.max(overlay.fill, FLOOR.overlay)}%`,
+      '--purge-glass-overlay-blur': `${overlay.blur}px`,
+      '--purge-glass-control-fill': `${Math.max(control.fill, FLOOR.control)}%`,
+    }
+  }
+
+  /**
+   * apply 把一份玻璃数据写到文档根上：data-glass 给样式做条件增强，CSS 变量给各层上色。
+   *
+   * 返回本次的判定，调用方（测试与 attach）不需要再算一遍。
+   */
+  function apply(root, value) {
+    const glass = normalize(value)
+    const level = glass ? levelOf(glass) : 'off'
+    const tokens = tokensOf(glass || { on: false, regions: Object.fromEntries(REGIONS.map((n) => [n, solid()])) })
+    if (root && root.style && typeof root.style.setProperty === 'function') {
+      // data-glass 只在浏览器里才有意义：假 root（测试）没有 dataset 也照常返回判定
+      if (root.dataset) root.dataset.glass = level
+      for (const [name, v] of Object.entries(tokens)) root.style.setProperty(name, v)
+    }
+    return { level, glass, tokens }
+  }
+
+  /**
+   * attach 订阅宿主的玻璃变化。
+   *
+   * 两条来源缺一不可：
+   *   - onGlass：玻璃「变化」时宿主会回调（切预设、拖滑块、换深浅色）；
+   *   - ready：hello 回来时带着当前的 glass，但宿主不会再补调 onGlass 一次，
+   *     所以首屏必须自己从 ready 里捞一次，否则页面要等到用户动一下才生效。
+   * 订阅失败、回调抛错都只吞掉这一次：玻璃画不出来是可以接受的，页面挂掉不是。
+   */
+  function attach(magpie, root) {
+    let live = true
+    const session = {
+      level: 'off',
+      settled: Promise.resolve(),
+      detach() { live = false },
+    }
+    const update = (value) => {
+      if (!live) return
+      try {
+        session.level = apply(root, value).level
+      } catch { /* 一次写不进去就保持上一次的状态 */ }
+    }
+
+    update(magpie && typeof magpie === 'object' ? magpie.glass : null)
+
+    if (magpie && typeof magpie === 'object') {
+      if (typeof magpie.onGlass === 'function') {
+        try {
+          magpie.onGlass((value) => update(value))
+        } catch { /* 宿主的订阅坏了，按没有玻璃处理 */ }
+      }
+      const ready = magpie.ready
+      if (ready && typeof ready.then === 'function') {
+        session.settled = Promise.resolve(ready)
+          .then((theme) => { if (!live) return; if (magpie.glass) return; update(theme && theme.glass) })
+          .catch(() => {})
+      }
+    }
+    return session
+  }
+
+  globalThis.PurgeGlass = { REGIONS, FLOOR, DEEP_BELOW, normalize, levelOf, tokensOf, apply, attach }
+
+  // 浏览器里自动挂上：页面只加一个 <script>，不必等 app.js 启动。
+  // （测试用 Function 跑这份脚本时没有 document，因此不会自动执行。）
+  try {
+    if (typeof window !== 'undefined' && typeof document !== 'undefined' && document.documentElement) {
+      attach(window.magpie, document.documentElement)
+    }
+  } catch { /* 自动挂失败也不该让脚本报错 */ }
+})()
+
+</script>
 <!-- 读正文的通道要排在 app.js 前面：app.js 启动就会用它取 catalog.json。 -->
 <script>
 // 页面读自己目录里的数据文件（正文快照 catalog.json）。
@@ -2137,6 +2543,14 @@ textarea.text-edit:focus-visible {
       <option value="light">浅色</option>
     </select>
   </label>
+  <label>玻璃
+    <select id="pv-glass">
+      <option value="off">关闭</option>
+      <option value="lite">轻透</option>
+      <option value="balanced">均衡</option>
+      <option value="clear">全透</option>
+    </select>
+  </label>
   <label>状态
     <select id="pv-snap">
       <option value="ready">就绪</option>
@@ -2148,17 +2562,21 @@ textarea.text-edit:focus-visible {
 ;(() => {
   const q = new URLSearchParams(location.hash.slice(1) || location.search.slice(1))
   const theme = document.getElementById('pv-theme')
+  const glass = document.getElementById('pv-glass')
   const snap = document.getElementById('pv-snap')
   theme.value = q.get('theme') === 'light' ? 'light' : 'dark'
+  glass.value = ['off', 'lite', 'balanced', 'clear'].includes(q.get('glass')) ? q.get('glass') : 'off'
   snap.value = q.get('snap') === 'blocked' ? 'blocked' : 'ready'
   const go = () => {
     const next = new URLSearchParams()
     next.set('theme', theme.value)
+    next.set('glass', glass.value)
     next.set('snap', snap.value)
     location.hash = next.toString()
     location.reload()
   }
   theme.onchange = go
+  glass.onchange = go
   snap.onchange = go
 
   // #row=N 直接打开某条的详情，省得每次都手点
